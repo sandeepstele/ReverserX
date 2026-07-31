@@ -1,6 +1,7 @@
 # Phase 0 — Foundation
 
 **Duration:** 2–3 weeks full-time  
+**Status:** Implemented and verified on 2026-08-01
 **Goal:** Establish the contracts and operational foundation needed by every
 later integration.
 
@@ -54,5 +55,17 @@ later integration.
 
 ## Exit decision
 
-Proceed only when tools and artifacts have stable IDs and a failed command can
-be diagnosed from persisted records. Later phases depend on this provenance.
+Phase 0 has passed its exit criteria. Verification includes:
+
+- 30 passing tests on Python 3.11 and 3.13 with 87% measured coverage;
+- clean Ruff lint and formatting checks;
+- clean strict MyPy checks;
+- successful source-distribution and wheel builds;
+- a real CLI flow covering initialization, scoped project creation, artifact
+  import, persisted tool execution, project retrieval, and dependency diagnosis;
+- a committed lock file and configured Linux CI across the oldest and current
+  Python development versions.
+
+Phase 1 may proceed after the project owner supplies an authorized APK fixture
+and expected static-analysis results. Tools and artifacts now have stable IDs,
+and completed or failed commands can be diagnosed from persisted records.

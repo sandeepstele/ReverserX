@@ -1,13 +1,24 @@
 # What You Can Do Now
 
-The best immediate contribution is to reduce uncertainty before implementation.
-Complete these items in order.
+The Phase 0 software foundation is implemented. The best immediate contribution
+is now to prepare the fixtures and product decisions required for Phase 1.
+
+## Foundation decisions completed
+
+- Python 3.11+ is the supported language baseline.
+- `uv` manages environments, locking, and developer commands.
+- macOS on Apple Silicon is the initial development host; Ubuntu x86_64 is
+  validated in CI.
+- Runtime data is local by default, with SQLite and content-addressed artifacts.
+- Hosted-model credentials are loaded from environment variables and redacted.
 
 ## This week
 
-- Decide the first supported development platform: macOS, Linux, or both.
-- Record the Python version and package manager the project will support.
-- Install and record versions of Java, JADX, Android platform tools, and Git.
+- Run `uv run reverserx doctor` and install a functional Java runtime. JADX is
+  present on the initial machine, but its Java dependency must be usable before
+  Phase 1 integration tests.
+- Install Android Platform Tools before Phase 3; ADB is not required for the
+  Phase 1 static pipeline.
 - Obtain two legally usable APK fixtures:
   - one small, unobfuscated application;
   - one application you control that contains a known crypto flow.
@@ -53,11 +64,14 @@ Document short answers to the following before implementation:
 
 ## First milestone checklist
 
-You are ready to begin Phase 1 when all of the following are true:
+The software portion of the first milestone is complete:
 
-- The CLI installs in a clean environment.
-- `reverserx doctor` reports dependency availability and versions.
-- A project can be created and reopened.
-- An artifact can be imported without overwriting the original.
-- A dummy tool invocation is recorded in SQLite with logs and status.
-- Unit tests and lint/type checks run through one documented command.
+- [x] The CLI installs in an isolated environment.
+- [x] `reverserx doctor` reports dependency availability and versions.
+- [x] A project can be created and reopened.
+- [x] An artifact can be imported without overwriting the original.
+- [x] A dummy tool invocation is recorded in SQLite with logs and status.
+- [x] Unit tests and lint/type checks run through one documented command.
+
+Begin Phase 1 implementation after an authorized APK fixture and its expected
+static-analysis results are available.

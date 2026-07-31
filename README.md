@@ -5,9 +5,42 @@ for Android applications, web APIs, and native binaries. It is intended to
 combine traditional security tooling with multiple AI models in one persistent,
 evidence-driven analysis workflow.
 
-> **Project status:** Planning and foundation design. The repository does not
-> yet contain an executable release. The product vision and phase-by-phase
-> implementation plans are documented and ready for development.
+> **Project status:** Pre-alpha foundation. Phase 0 provides an installable CLI,
+> validated configuration, versioned domain models, SQLite migrations,
+> content-addressed artifact storage, a typed tool registry, bounded subprocess
+> execution, dependency diagnostics, and automated quality checks. Reverse-
+> engineering integrations begin in Phase 1.
+
+## Quick start
+
+ReverserX requires Python 3.11 or newer. Development uses
+[uv](https://docs.astral.sh/uv/) for reproducible environments and commands.
+
+```bash
+uv sync --extra dev
+uv run reverserx --help
+uv run reverserx --data-dir .reverserx init
+uv run reverserx doctor
+```
+
+Create a scoped project, import an authorized artifact, and verify the tool
+execution pipeline:
+
+```bash
+uv run reverserx --data-dir .reverserx project create "Demo App" \
+  --package com.example.demo \
+  --host api.example.test
+
+uv run reverserx --data-dir .reverserx artifact import demo-app ./fixture.apk
+
+uv run reverserx --data-dir .reverserx tool run demo-app echo \
+  --arguments '{"message":"foundation ready"}'
+```
+
+Runtime data is stored outside the repository by default. Use
+`REVERSERX_DATA_DIR`, `--data-dir`, or a YAML configuration file to select a
+different location. Provider secrets are accepted only through environment
+variables and are redacted from configuration output and configured logs.
 
 ## What ReverserX is intended to do
 
@@ -157,10 +190,9 @@ ReverserX/
 The complete design rationale, proposed tool interfaces, dependency list, and
 example end-to-end workflow are in the [original project plan](Plan.md).
 
-## Starting development
+## Continuing development
 
-Implementation should begin with Phase 0 rather than with the autonomous agent
-loop. The first milestone is a deterministic foundation that can:
+The Phase 0 foundation now supports these deterministic operations:
 
 1. Install and expose a `reverserx` CLI.
 2. Create and reopen a local project.
@@ -170,9 +202,11 @@ loop. The first milestone is a deterministic foundation that can:
 6. Persist the tool run and its evidence in SQLite.
 7. Run unit, lint, format, and type checks through one documented command.
 
-Before implementation, decide the supported host platform and Python version,
+The next implementation target is [Phase 1](planning/phase-01-static-context.md):
+APK validation, JADX integration, manifest analysis, source chunking, retrieval,
+context budgets, and measurable obfuscation signals. Before beginning it,
 prepare authorized APK fixtures, establish a provider/API budget, and define the
-first measurable demonstration goal. These decisions are listed in
+first measurable demonstration goal. Remaining owner decisions are listed in
 [NEXT_STEPS.md](planning/NEXT_STEPS.md).
 
 ## Planned external dependencies

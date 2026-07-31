@@ -1,0 +1,8 @@
+# Optional local configuration. Environment variables override these values.
+data_dir: .reverserx
+log_level: INFO
+default_token_budget: 60000
+max_agent_steps: 30
+max_tool_retries: 2
+max_run_cost_usd: 5.0
+hosted_models_enabled: true
