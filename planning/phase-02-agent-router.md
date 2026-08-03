@@ -7,6 +7,9 @@ loop with transparent model selection and cost controls.
 ## Deliverables
 
 - Common provider interface and normalized model responses.
+- Typed multimodal message parts for text, code, images, and artifact references.
+- Provider capability registry covering modalities, context limits, privacy
+  location, structured output, and tool calling.
 - Initial hosted reasoning provider plus local/Ollama provider; add further
   providers only through the same contract.
 - Prompt templates with explicit structured outputs.
@@ -24,15 +27,17 @@ loop with transparent model selection and cost controls.
 
 ## Work breakdown
 
-1. Implement provider adapters and recorded fake providers for tests.
-2. Define task categories and routing policies independently of model names.
-3. Record estimates and actual usage for every request.
-4. Implement planner validation and repair for invalid structured output.
-5. Implement executor state transitions and idempotency rules.
-6. Implement reviewer decisions with a finite set of allowed transitions.
-7. Add loop and recursion detection.
-8. Build scenario tests from fixed tool/model transcripts.
-9. Compare routed output quality and cost against a single-model baseline.
+1. Define typed text, code, image, and artifact-reference message parts.
+2. Implement provider adapters and recorded fake providers for tests.
+3. Define task categories, capability requirements, and routing policies
+   independently of model names.
+4. Record estimates and actual usage for every request, including image inputs.
+5. Implement planner validation and repair for invalid structured output.
+6. Implement executor state transitions and idempotency rules.
+7. Implement reviewer decisions with a finite set of allowed transitions.
+8. Add loop and recursion detection.
+9. Build scenario tests from fixed text-only and multimodal transcripts.
+10. Compare routed output quality and cost against a single-model baseline.
 
 ## Acceptance criteria
 
@@ -43,6 +48,10 @@ loop with transparent model selection and cost controls.
 - Every finding identifies its supporting tool evidence and model interpretation.
 - The user sees estimated cost before execution and actual cost afterward.
 - Hosted providers can be disabled for a project.
+- Image-bearing tasks route only to providers that declare image support.
+- Hosted multimodal providers never receive an image when project policy is
+  local-only, and unsupported modalities produce an explicit routing error.
+- Every image input retains an artifact digest, media type, and evidence source.
 - A complete fixture run answers the static encryption-location goal and creates
   an evidence-linked Markdown report.
 

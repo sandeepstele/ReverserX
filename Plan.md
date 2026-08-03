@@ -181,6 +181,15 @@ This is not just multi-model — it's cost-aware multi-model routing.
 | Documentation generation   | Claude Sonnet   | Local model    | $0.01-0.03     |
 | Sensitive code review      | Local model     | —              | $0.00          |
 | Embedding / semantic search| Nomic Embed     | —              | $0.00          |
+| UI/screenshot analysis     | Multimodal model| Local vision model | Configured  |
+
+**Model Capability Registry**: Providers advertise supported input modalities
+(text, code, image), context limits, privacy location, structured-output
+support, and tool-calling support. Routing selects by required capability before
+optimizing for cost. Screenshots, rendered resources, UI states, QR codes, and
+other visual evidence use typed image parts linked to their source artifact.
+Text-only models receive an explicitly generated description only when policy
+allows that fallback; they never silently receive or ignore unsupported input.
 
 **Cost Estimator**: Before executing a plan, the router estimates the total
 cost based on expected token usage per step × model pricing. The user sees

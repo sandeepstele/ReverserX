@@ -1,11 +1,14 @@
 # Phase 1 — Android Static Intelligence and Context
 
 **Duration:** 6–8 weeks full-time  
-**Goal:** Turn an APK into searchable, ranked, evidence-linked source context.
+**Goal:** Turn an APK or APKM bundle into searchable, ranked, evidence-linked
+source context.
 
 ## Deliverables
 
-- APK validation and metadata extraction.
+- APK and APKM validation, metadata extraction, and split inventory.
+- Deterministic selection of the base APK for code analysis while retaining
+  configuration splits as linked artifacts.
 - JADX CLI adapter with structured results for sources, manifest, resources,
   certificates, assets, and native libraries.
 - Manifest parser producing permissions, components, intent filters, exported
@@ -22,20 +25,23 @@
 
 ## Work breakdown
 
-1. Integrate JADX using the Phase 0 process runner.
-2. Normalize paths and preserve exact file/line locations.
-3. Implement manifest and certificate parsing without an LLM dependency.
-4. Define chunk identities that remain stable across repeated indexing.
-5. Add embedding and lexical indexes.
-6. Implement retrieval scoring and token estimation.
-7. Add summaries as derived, versioned artifacts.
-8. Implement obfuscation signals: name entropy, short-name ratios, reflection
+1. Implement safe APK/APKM inspection and base/split selection.
+2. Integrate JADX using the Phase 0 process runner.
+3. Normalize paths and preserve exact file/line locations.
+4. Implement manifest and certificate parsing without an LLM dependency.
+5. Define chunk identities that remain stable across repeated indexing.
+6. Add embedding and lexical indexes.
+7. Implement retrieval scoring and token estimation.
+8. Add summaries as derived, versioned artifacts.
+9. Implement obfuscation signals: name entropy, short-name ratios, reflection
    density, encrypted-string indicators, and control-flow metrics.
-9. Build a retrieval benchmark with known questions and expected methods.
+10. Build a retrieval benchmark with known questions and expected methods.
 
 ## Acceptance criteria
 
-- The same APK produces reproducible artifact and chunk identities.
+- The same APK or APKM produces reproducible artifact and chunk identities.
+- APKM ingestion identifies the base APK and every split without treating a
+  resource-only split as the primary code target.
 - Manifest results cite the originating manifest node or source location.
 - Search results include file, line, enclosing type/method, and a bounded excerpt.
 - Retrieval finds expected methods for the fixture questions at an agreed top-k

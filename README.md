@@ -97,6 +97,10 @@ without depending on an external agent framework.
 - Convert a high-level research objective into validated analysis steps.
 - Execute only registered tools with structured arguments.
 - Review each result and insert justified follow-up steps.
+- Represent model input as typed text, code, and image parts so screenshots,
+  rendered resources, and UI evidence can be routed to multimodal models.
+- Select providers by required capabilities and privacy policy before optimizing
+  for price; unsupported modalities are never silently dropped.
 - Route planning, code reasoning, reporting, and sensitive analysis to suitable
   hosted or local models.
 - Estimate cost before execution and enforce cost, token, step, retry, and time
