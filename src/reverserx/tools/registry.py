@@ -7,8 +7,20 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from reverserx.reporting import StaticReportTool
 from reverserx.tools.base import BaseTool, ToolContext, ToolExecution
 from reverserx.tools.example import EchoTool
+from reverserx.tools.static import (
+    ApkBundleImportTool,
+    ApkInspectTool,
+    ApkMetadataTool,
+    ContextQueryTool,
+    JadxTool,
+    ManifestAnalyzeTool,
+    ObfuscationDetectTool,
+    SourceIndexTool,
+    SourceSearchTool,
+)
 
 
 class ToolRegistryError(ValueError):
@@ -56,4 +68,14 @@ class ToolRegistry:
 def build_default_registry() -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(EchoTool())
+    registry.register(ApkInspectTool())
+    registry.register(ApkBundleImportTool())
+    registry.register(JadxTool())
+    registry.register(ManifestAnalyzeTool())
+    registry.register(ApkMetadataTool())
+    registry.register(ObfuscationDetectTool())
+    registry.register(SourceIndexTool())
+    registry.register(SourceSearchTool())
+    registry.register(ContextQueryTool())
+    registry.register(StaticReportTool())
     return registry

@@ -12,7 +12,7 @@ def test_registry_exposes_schema_and_executes_validated_tool(tmp_path: Path) -> 
 
     result = registry.execute("echo", context, {"message": "hello", "repeat": 2})
 
-    assert registry.list_schemas()[0]["name"] == "echo"
+    assert "echo" in {schema["name"] for schema in registry.list_schemas()}
     assert result.output["lines"] == ["hello", "hello"]
 
 

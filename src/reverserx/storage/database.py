@@ -137,6 +137,155 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
         CREATE INDEX idx_findings_project ON findings(project_id);
         """,
     ),
+    (
+        2,
+        """
+        CREATE TABLE analysis_indexes (
+            id TEXT PRIMARY KEY,
+            schema_version TEXT NOT NULL,
+            project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            artifact_id TEXT REFERENCES artifacts(id) ON DELETE SET NULL,
+            source_root TEXT NOT NULL,
+            source_fingerprint TEXT NOT NULL,
+            chunker_version TEXT NOT NULL,
+            chunk_count INTEGER NOT NULL,
+            metadata_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(project_id, source_root)
+        );
+
+        CREATE TABLE source_chunks (
+            id TEXT PRIMARY KEY,
+            schema_version TEXT NOT NULL,
+            index_id TEXT NOT NULL REFERENCES analysis_indexes(id) ON DELETE CASCADE,
+            project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            artifact_id TEXT REFERENCES artifacts(id) ON DELETE SET NULL,
+            content_sha256 TEXT NOT NULL,
+            language TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            relative_path TEXT NOT NULL,
+            symbol TEXT,
+            start_line INTEGER NOT NULL,
+            end_line INTEGER NOT NULL,
+            start_instruction INTEGER,
+            end_instruction INTEGER,
+            content TEXT NOT NULL,
+            summary TEXT,
+            metadata_json TEXT NOT NULL
+        );
+
+        CREATE TABLE vector_indexes (
+            index_id TEXT PRIMARY KEY REFERENCES analysis_indexes(id) ON DELETE CASCADE,
+            backend TEXT NOT NULL,
+            collection_name TEXT NOT NULL,
+            embedding_provider TEXT NOT NULL,
+            dimensions INTEGER NOT NULL,
+            document_count INTEGER NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE context_summaries (
+            id TEXT PRIMARY KEY,
+            index_id TEXT NOT NULL REFERENCES analysis_indexes(id) ON DELETE CASCADE,
+            level TEXT NOT NULL,
+            scope TEXT NOT NULL,
+            source_fingerprint TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(index_id, level, scope)
+        );
+
+        CREATE INDEX idx_analysis_indexes_project ON analysis_indexes(project_id);
+        CREATE INDEX idx_source_chunks_index ON source_chunks(index_id);
+        CREATE INDEX idx_source_chunks_project ON source_chunks(project_id);
+        CREATE INDEX idx_source_chunks_path ON source_chunks(project_id, relative_path);
+        CREATE INDEX idx_context_summaries_index ON context_summaries(index_id);
+        """,
+    ),
+    (
+        3,
+        """
+        PRAGMA foreign_keys = OFF;
+        BEGIN IMMEDIATE;
+
+        CREATE TABLE analysis_indexes_v3 (
+            id TEXT PRIMARY KEY,
+            schema_version TEXT NOT NULL,
+            project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            artifact_id TEXT REFERENCES artifacts(id) ON DELETE SET NULL,
+            source_root TEXT NOT NULL,
+            source_fingerprint TEXT NOT NULL,
+            chunker_version TEXT NOT NULL,
+            chunk_count INTEGER NOT NULL,
+            metadata_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        INSERT INTO analysis_indexes_v3(
+            id, schema_version, project_id, artifact_id, source_root,
+            source_fingerprint, chunker_version, chunk_count,
+            metadata_json, created_at, updated_at
+        )
+        SELECT
+            id, schema_version, project_id, artifact_id, source_root,
+            source_fingerprint, chunker_version, chunk_count,
+            metadata_json, created_at, updated_at
+        FROM analysis_indexes;
+
+        CREATE TABLE source_chunks_v3 (
+            id TEXT NOT NULL,
+            schema_version TEXT NOT NULL,
+            index_id TEXT NOT NULL REFERENCES analysis_indexes(id) ON DELETE CASCADE,
+            project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            artifact_id TEXT REFERENCES artifacts(id) ON DELETE SET NULL,
+            content_sha256 TEXT NOT NULL,
+            language TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            relative_path TEXT NOT NULL,
+            symbol TEXT,
+            start_line INTEGER NOT NULL,
+            end_line INTEGER NOT NULL,
+            start_instruction INTEGER,
+            end_instruction INTEGER,
+            content TEXT NOT NULL,
+            summary TEXT,
+            metadata_json TEXT NOT NULL,
+            PRIMARY KEY(index_id, id)
+        );
+
+        INSERT INTO source_chunks_v3(
+            id, schema_version, index_id, project_id, artifact_id,
+            content_sha256, language, kind, relative_path, symbol,
+            start_line, end_line, start_instruction, end_instruction,
+            content, summary, metadata_json
+        )
+        SELECT
+            id, schema_version, index_id, project_id, artifact_id,
+            content_sha256, language, kind, relative_path, symbol,
+            start_line, end_line, start_instruction, end_instruction,
+            content, summary, metadata_json
+        FROM source_chunks;
+
+        DROP TABLE source_chunks;
+        DROP TABLE analysis_indexes;
+        ALTER TABLE analysis_indexes_v3 RENAME TO analysis_indexes;
+        ALTER TABLE source_chunks_v3 RENAME TO source_chunks;
+
+        CREATE INDEX idx_analysis_indexes_project
+            ON analysis_indexes(project_id);
+        CREATE INDEX idx_analysis_indexes_project_root
+            ON analysis_indexes(project_id, source_root);
+        CREATE INDEX idx_source_chunks_index ON source_chunks(index_id);
+        CREATE INDEX idx_source_chunks_project ON source_chunks(project_id);
+        CREATE INDEX idx_source_chunks_path
+            ON source_chunks(project_id, relative_path);
+
+        COMMIT;
+        PRAGMA foreign_keys = ON;
+        """,
+    ),
 )
 
 
@@ -286,6 +435,27 @@ class Database:
                 (project_id, sha256),
             ).fetchone()
         return _artifact_from_row(row) if row is not None else None
+
+    def get_artifact(self, project_id: str, reference: str) -> Artifact:
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM artifacts
+                WHERE project_id = ? AND (id = ? OR sha256 = ?)
+                """,
+                (project_id, reference, reference),
+            ).fetchone()
+        if row is None:
+            raise NotFoundError(f"artifact not found: {reference}")
+        return _artifact_from_row(row)
+
+    def list_artifacts(self, project_id: str) -> list[Artifact]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM artifacts WHERE project_id = ? ORDER BY imported_at, id",
+                (project_id,),
+            ).fetchall()
+        return [_artifact_from_row(row) for row in rows]
 
     def record_tool_run(self, tool_run: ToolRun) -> ToolRun:
         data = tool_run.model_dump(mode="json")

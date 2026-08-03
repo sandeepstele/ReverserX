@@ -1,77 +1,158 @@
 # What You Can Do Now
 
-The Phase 0 software foundation is implemented. The best immediate contribution
-is now to prepare the fixtures and product decisions required for Phase 1.
+Phase 0 and Phase 1 engineering are complete. The immediate objective is to
+finish owner/product acceptance through labeled scoring and manual review, not
+to treat engineering acceptance as proof of product quality or begin the
+generic agent loop early.
 
-## Foundation decisions completed
+## Current verified baseline
 
-- Python 3.11+ is the supported language baseline.
-- `uv` manages environments, locking, and developer commands.
-- macOS on Apple Silicon is the initial development host; Ubuntu x86_64 is
-  validated in CI.
-- Runtime data is local by default, with SQLite and content-addressed artifacts.
-- Hosted-model credentials are loaded from environment variables and redacted.
+- The final implementation baseline has 213 passing repository tests with 85%
+  measured coverage.
+- Ruff formatting/linting and strict MyPy validation pass.
+- The controlled production-`ContextService` benchmark records hit@1, hit@3,
+  hit@5, and MRR of 1.0.
+- The authorized fixture's base APK is 235,169,283 bytes with 20 DEX files.
+- Its 7,329,019-byte retained split is resource-only.
+- JADX 1.5.6 produced 155,643 source files and 9,809 resource files under
+  explicit partial-result acceptance, with 1,095 reported errors.
+- Engineering index run **`run_40cce1b79bc74186aa1ab39845920ac4`** completed
+  in **905.2 seconds** with chunker **1.1.0** and fingerprint
+  **`4070e0d40dc0976ce1e9a3932f9e5c3a5e81483c745ea376d3035cea3d2f6b1e`**.
+- All **155,643 sources** were indexed with **0 skipped** and **29 bounded
+  oversized fallbacks**, producing **917,131 chunks** and **754,003 summaries**.
+- The authoritative index has exactly **594,112 method chunks** and **594,112
+  method summaries**. Its published vector metadata records **917,131
+  documents**, **384 dimensions**, and **`local-hashing-v1`**.
+- Exact and timeout-bounded regex real-fixture searches completed in **32.1**
+  and **28.1 seconds**. A bounded known-path hybrid query completed in **1.48
+  seconds**, returning **10 chunks** and packing **3,281 of 30,000 tokens**.
+- The static report was generated with partial/error/signing/index-warning and
+  provenance limitations preserved. Initial diagnostic omissions, summary
+  collisions, and readiness issues were fixed before the authoritative run.
 
-## This week
+The controlled benchmark is not a substitute for scoring retrieval on the
+authorized fixture. The signing inventory fingerprints evidence but does not
+cryptographically verify signature validity or signer trust.
 
-- Run `uv run reverserx doctor` and install a functional Java runtime. JADX is
-  present on the initial machine, but its Java dependency must be usable before
-  Phase 1 integration tests.
-- Install Android Platform Tools before Phase 3; ADB is not required for the
-  Phase 1 static pipeline.
-- Obtain two legally usable APK fixtures:
-  - one small, unobfuscated application;
-  - one application you control that contains a known crypto flow.
-- Write down the first demonstration goal: for example, “Given the fixture APK,
-  locate the encryption implementation and produce cited code evidence.”
-- Create API accounts or local endpoints for the initial two model providers.
-  Do not commit keys; decide how local environment secrets will be loaded.
-- Decide a monthly development/API budget and a maximum cost per analysis run.
+## Completed engineering acceptance work
 
-## Product decisions you should make
+The following authorized-fixture gates are complete:
 
-Document short answers to the following before implementation:
+1. The partial JADX output was indexed with complete file accounting,
+   collision-free method summaries, and published vector metadata.
+2. Deterministic exact and regular-expression searches preserved file, symbol,
+   line, and excerpt evidence.
+3. A bounded hybrid retrieval with a known-path hint demonstrated operational
+   query and token-packing behavior on the large fixture.
+4. The static report was generated and checked for partial-result, error,
+   signing, index-warning, and provenance disclosure.
+5. The diagnostic file omissions, method-summary collisions, and vector
+   readiness gap were corrected and revalidated on the authoritative run.
 
-1. Is ReverserX initially a personal local tool or a distributable product?
-2. Must the first MVP work completely offline, or is a hosted model allowed?
-3. Which Android versions and CPU architectures must be supported first?
-4. Will the MVP require a rooted emulator/device, or only static analysis?
-5. What result proves the MVP is successful?
-6. Which artifacts may leave the machine for hosted-model analysis?
-7. How long should APKs, captures, and model transcripts be retained?
+## Remaining owner/product acceptance work
 
-## Useful non-coding work
+Complete these tasks before declaring product acceptance:
 
-- Build an authorized fixture catalog with expected findings.
+1. **Score owner-labeled retrieval.** Run 20–30 realistic questions through the
+   production `ContextService` and calculate hit@1, hit@3, hit@5, and MRR as a
+   new dataset, separate from the controlled score of 1.0.
+2. **Review the decoded manifest.** Manually confirm exported-state inference,
+   Android 12 explicit-export warnings, application permission inheritance, and
+   provider read/write guards.
+3. **Review obfuscation output.** Check the highest-scoring signals and record
+   false positives, accounting for the 100,000-file cap and JADX-deobfuscated
+   names.
+4. **Review the static report as an owner.** Confirm that candidate evidence is
+   useful and appropriately qualified rather than presented as proof.
+5. **Record the product decision.** Either accept the partial decompilation for
+   the first MVP with documented limits or open a bounded task for another
+   decompiler/error-reduction strategy.
+
+## What is needed from the app owner
+
+1. Identify the expected important methods, classes, packages, or behaviors in
+   the authorized app without publishing proprietary source.
+2. Write 20–30 realistic questions, including the first demonstration goal,
+   without putting the expected source filename or method name in every query.
+3. Review a sample of exported-component and permission findings against the
+   application's intended design.
+4. Review a sample of obfuscation findings and label true/false positives.
+5. Decide whether 1,095 JADX-reported errors are acceptable for the MVP if the
+   target flows are still recoverable.
+6. Approve a small redistributable fixture for CI and public examples. Keep the
+   authorized private APK and its recovered sources out of Git.
+
+## Decisions needed before Phase 2
+
+- Is ReverserX initially a personal local tool or a distributable product?
+- Must analysis work completely offline, or may approved source/image context be
+  sent to hosted multimodal models?
+- Which artifacts and modalities may leave the machine?
+- Which initial hosted and local model providers should be supported?
+- What are the maximum model cost, token, step, retry, and wall-time limits per
+  analysis?
+- How long should APKs, recovered source, embeddings, reports, and model
+  transcripts be retained?
+- What exact Phase 1 result is the go/no-go gate for beginning Phase 2?
+
+Do not place provider API keys in chat or Git. Configure them locally through
+environment variables when Phase 2 begins.
+
+## Useful owner work to finish acceptance
+
+- Maintain an authorized fixture catalog with expected findings and sharing
+  restrictions.
 - Define a severity and confidence vocabulary for findings.
-- Draft a sample final report by hand. This reveals which evidence fields the
-  storage and tool contracts must preserve.
-- Create expected-result files for manifest analysis, source retrieval, and
-  encryption discovery.
-- Maintain an external-tool compatibility table as versions are tested.
-- Define a responsible-use statement and the exact confirmation required before
-  dynamic or network actions.
+- Review the generated Markdown report structure and identify missing evidence
+  fields before autonomous reporting is introduced.
+- Maintain an external-tool compatibility table, including the accepted JADX
+  1.5.6 partial-result behavior.
+- Define the responsible-use confirmation required before later dynamic or
+  network actions.
 
-## Work to avoid initially
-
-- Do not begin with a generic autonomous agent loop. First make deterministic
-  tools produce dependable structured results.
-- Do not install Redis until concurrent workers create a demonstrated need.
-- Do not attempt generic deobfuscation before normal APK analysis is reliable.
-- Do not start Ghidra/JNI tracing before the Java/Kotlin static pipeline works.
-- Do not optimize provider cost without recording actual token use and quality.
-- Do not use third-party APKs without clear authorization and licensing.
-
-## First milestone checklist
-
-The software portion of the first milestone is complete:
+## Completed milestone checklist
 
 - [x] The CLI installs in an isolated environment.
-- [x] `reverserx doctor` reports dependency availability and versions.
-- [x] A project can be created and reopened.
-- [x] An artifact can be imported without overwriting the original.
-- [x] A dummy tool invocation is recorded in SQLite with logs and status.
-- [x] Unit tests and lint/type checks run through one documented command.
+- [x] Dependency diagnostics report tool availability and versions.
+- [x] Projects and sessions persist in SQLite.
+- [x] APK/APKM inputs are safely inspected and imported without overwriting raw
+  artifacts.
+- [x] Base and resource-only split APKs are selected deterministically.
+- [x] Static metadata, manifest, search, context, obfuscation, and report tools
+  have typed results and automated coverage.
+- [x] Controlled `ContextService` retrieval meets the recorded benchmark.
+- [x] The authorized base APK reaches an explicit, structured partial JADX
+  result rather than being misreported as a clean success.
+- [x] The authorized partial source tree is indexed with all 155,643 files
+  accounted for and vector metadata published for all 917,131 chunks.
+- [x] Exact, regex, and bounded known-path hybrid retrieval run successfully on
+  the authorized fixture.
+- [x] The evidence-linked static report is generated with limitations intact.
+- [ ] Owner-labeled real-fixture queries are scored and reviewed.
+- [ ] Real manifest and obfuscation findings are manually sampled.
+- [ ] The static report is owner-reviewed and accepted with limitations intact.
 
-Begin Phase 1 implementation after an authorized APK fixture and its expected
-static-analysis results are available.
+## Work to avoid now
+
+- Do not conflate Phase 1 engineering acceptance with owner/product acceptance.
+- Do not generalize from the bounded known-path query: the unguided
+  natural-language real query was noisy.
+- Do not describe `local-hashing-v1` as semantic understanding; it is a lexical
+  hashing fallback.
+- Do not generalize the file-level, memory-backed controlled benchmark to exact
+  method ranking or production Chroma behavior.
+- Do not assume a hybrid query exhaustively scans lexical matches; it reranks a
+  bounded ANN/known-path candidate set. Use exact/regex search for that purpose.
+- Do not treat the capped obfuscation result as exhaustive; it scanned at most
+  100,000 files and used JADX-deobfuscated names.
+- Do not present report findings as proof; they are candidate evidence requiring
+  analyst review.
+- Do not hide or discard the 1,095 JADX errors in retrieval or reports.
+- Do not describe signing fingerprints as cryptographic verification.
+- Do not commit the authorized APK, recovered proprietary source, or private
+  indexes.
+- Do not begin the generic autonomous agent loop before the remaining Phase 1
+  acceptance gates close.
+- Do not start Frida, Ghidra, or broad deobfuscation work before the static
+  vertical slice receives owner/product acceptance.

@@ -1,7 +1,7 @@
-.PHONY: install format lint typecheck test check doctor
+.PHONY: install format lint typecheck test build check doctor
 
 install:
-	uv sync --extra dev
+	uv sync --locked --extra dev --extra phase1
 
 format:
 	uv run ruff format .
@@ -16,7 +16,10 @@ typecheck:
 test:
 	uv run pytest
 
-check: lint typecheck test
+build:
+	uv build
+
+check: lint typecheck test build
 
 doctor:
 	uv run reverserx doctor

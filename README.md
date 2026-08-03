@@ -1,15 +1,15 @@
 # ReverserX
 
-ReverserX is a planned standalone, AI-orchestrated reverse-engineering platform
+ReverserX is a standalone reverse-engineering platform under active development
 for Android applications, web APIs, and native binaries. It is intended to
 combine traditional security tooling with multiple AI models in one persistent,
 evidence-driven analysis workflow.
 
-> **Project status:** Pre-alpha foundation. Phase 0 provides an installable CLI,
-> validated configuration, versioned domain models, SQLite migrations,
-> content-addressed artifact storage, a typed tool registry, bounded subprocess
-> execution, dependency diagnostics, and automated quality checks. Reverse-
-> engineering integrations begin in Phase 1.
+> **Project status:** Pre-alpha static-analysis implementation. Phases 0 and 1
+> provide the foundation plus safe APK/APKM ingestion, JADX integration, manifest
+> and signing metadata, persistent source indexing, Chroma-backed retrieval,
+> context budgets, obfuscation signals, benchmarks, and Markdown reports. Dynamic
+> analysis and autonomous model orchestration are not implemented yet.
 
 ## Quick start
 
@@ -17,30 +17,93 @@ ReverserX requires Python 3.11 or newer. Development uses
 [uv](https://docs.astral.sh/uv/) for reproducible environments and commands.
 
 ```bash
-uv sync --extra dev
+uv sync --locked --extra dev --extra phase1
 uv run reverserx --help
 uv run reverserx --data-dir .reverserx init
 uv run reverserx doctor
 ```
 
-Create a scoped project, import an authorized artifact, and verify the tool
-execution pipeline:
+Create a scoped project and ingest an authorized Android package:
 
 ```bash
 uv run reverserx --data-dir .reverserx project create "Demo App" \
   --package com.example.demo \
   --host api.example.test
 
-uv run reverserx --data-dir .reverserx artifact import demo-app ./fixture.apk
-
-uv run reverserx --data-dir .reverserx tool run demo-app echo \
-  --arguments '{"message":"foundation ready"}'
+uv run reverserx --data-dir .reverserx apk import demo-app ./fixture.apkm
+uv run reverserx --data-dir .reverserx artifact list demo-app
+uv run reverserx --data-dir .reverserx apk metadata demo-app
+uv run reverserx --data-dir .reverserx apk decompile demo-app --timeout 3600
 ```
+
+Then build and query the static context. Pass the base artifact ID shown by
+`apk import` or `artifact list` so the index has explicit artifact lineage:
+
+```bash
+uv run reverserx --data-dir .reverserx manifest analyze demo-app
+uv run reverserx --data-dir .reverserx source index demo-app \
+  --artifact <base-artifact-id>
+uv run reverserx --data-dir .reverserx source search demo-app \
+  "Cipher.getInstance"
+uv run reverserx --data-dir .reverserx context query demo-app \
+  "Where is outbound request encryption performed?" --budget 60000
+uv run reverserx --data-dir .reverserx obfuscation detect demo-app
+uv run reverserx --data-dir .reverserx report static demo-app \
+  --goal "Locate request encryption with source evidence"
+```
+
+JADX sometimes returns a non-zero code while producing useful output for a
+large or intentionally difficult app. ReverserX records that as a failure by
+default. After reviewing the diagnostics, rerun with `--show-bad-code` and
+`--accept-partial` to retain explicitly labeled partial output; it is never
+silently presented as a complete decompilation.
 
 Runtime data is stored outside the repository by default. Use
 `REVERSERX_DATA_DIR`, `--data-dir`, or a YAML configuration file to select a
 different location. Provider secrets are accepted only through environment
 variables and are redacted from configuration output and configured logs.
+
+## Phase 1 validation status
+
+Phase 1 implementation and engineering acceptance are complete. The final
+repository gate has **213 passing tests** with **85% measured coverage**; Ruff
+formatting and linting, strict MyPy checks, the locked dependency check, and
+wheel/source-package builds also pass.
+
+The authorized large APKM fixture was exercised locally and kept outside Git:
+
+- Its 235,169,283-byte base APK contains 20 DEX files; the retained
+  7,329,019-byte configuration split is resource-only.
+- JADX 1.5.6 produced 155,643 source files and 9,809 resources while reporting
+  1,095 errors. ReverserX preserves this as an explicitly accepted **partial**
+  result, never as a clean decompilation.
+- The authoritative chunker-v1.1 index accounts for all 155,643 source files
+  with 0 skipped and 29 bounded oversized-file fallbacks. It contains 917,131
+  chunks and 754,003 summaries, including an exact 594,112 method-chunk to
+  594,112 method-summary match. Non-overlapping file-gap chunks preserve
+  package/import lines, Kotlin top-level declarations, and Smali class fields.
+- Exact and timeout-bounded regex searches completed in 32.1 and 28.1 seconds.
+  A bounded query with a known-path hint completed in 1.48 seconds and packed
+  10 chunks into 3,281 of 30,000 allowed tokens.
+- The controlled committed retrieval benchmark records hit@1/3/5 and MRR of
+  1.0. Those numbers describe only that benchmark, not the large private app.
+
+Owner/product acceptance remains open. It requires scoring 20–30 owner-labeled
+questions on the authorized app and manually reviewing representative manifest
+and obfuscation results. The unguided natural-language real-app query was noisy,
+`local-hashing-v1` is a lexical fallback rather than a learned semantic model,
+and static candidates do not prove runtime behavior. See the
+[Phase 1 acceptance record](planning/phase-01-static-context.md) and
+[owner next steps](planning/NEXT_STEPS.md) for the complete evidence and open
+decisions.
+
+Phase 1 also integrity-checks every cached JADX output file before reuse,
+rejects XML DTD/entity declarations, treats resource-backed manifest booleans
+as indeterminate, and applies per-chunk regular-expression timeouts. Cache
+markers created before schema v3 are intentionally not trusted; use
+`apk decompile --force` to rebuild them. Hybrid context queries are ANN-first
+and lexically rerank a bounded candidate set, so use exhaustive exact/regex
+source search when a literal match must not be missed.
 
 ## What ReverserX is intended to do
 
@@ -77,8 +140,8 @@ without depending on an external agent framework.
 ### Android static analysis
 
 - Decompile APKs using JADX.
-- Parse permissions, components, intent filters, certificates, resources, and
-  exported attack surfaces.
+- Parse permissions, components, intent filters, resources, exported attack
+  surfaces, and signing-certificate fingerprints.
 - Search Java, Kotlin, and Smali with exact-text and regular-expression queries.
 - Trace relevant callers, callees, and Java-to-JNI boundaries.
 - Identify native libraries and extract structured ELF metadata.
@@ -154,15 +217,15 @@ their source, tool version, and confidence.
 
 ## Delivery roadmap
 
-| Phase | Outcome | Solo full-time estimate |
-|---|---|---:|
-| [0 — Foundation](planning/phase-00-foundation.md) | CLI, contracts, storage, configuration, safe subprocesses | 2–3 weeks |
-| [1 — Static intelligence](planning/phase-01-static-context.md) | APK ingestion, JADX, retrieval, context budgets, obfuscation signals | 6–8 weeks |
-| [2 — Agent and router](planning/phase-02-agent-router.md) | Bounded agent loop, model routing, estimates and usage limits | 5–7 weeks |
-| [3 — Dynamic and API](planning/phase-03-dynamic-api.md) | ADB, Frida, mitmproxy, endpoint mapping, evidence correlation | 6–9 weeks |
-| [4 — Native and deobfuscation](planning/phase-04-native-deobfuscation.md) | Ghidra, packer/CFF detection, JNI/native graph | 8–12 weeks |
-| [5 — Persistence and reporting](planning/phase-05-persistence-reporting.md) | Full resume, evidence provenance, Markdown/HTML reports | 4–6 weeks |
-| [6 — Hardening and release](planning/phase-06-hardening-release.md) | Compatibility, security review, testing, packaging, documentation | 6–8 weeks |
+| Phase | Status | Outcome | Solo full-time estimate |
+|---|---|---|---:|
+| [0 — Foundation](planning/phase-00-foundation.md) | Implemented | CLI, contracts, storage, configuration, safe subprocesses | 2–3 weeks |
+| [1 — Static intelligence](planning/phase-01-static-context.md) | Implemented | APK ingestion, JADX, retrieval, context budgets, obfuscation signals | 6–8 weeks |
+| [2 — Agent and router](planning/phase-02-agent-router.md) | Next | Bounded agent loop, model routing, estimates and usage limits | 5–7 weeks |
+| [3 — Dynamic and API](planning/phase-03-dynamic-api.md) | Planned | ADB, Frida, mitmproxy, endpoint mapping, evidence correlation | 6–9 weeks |
+| [4 — Native and deobfuscation](planning/phase-04-native-deobfuscation.md) | Planned | Ghidra, packer/CFF detection, JNI/native graph | 8–12 weeks |
+| [5 — Persistence and reporting](planning/phase-05-persistence-reporting.md) | Planned | Full resume, evidence provenance, Markdown/HTML reports | 4–6 weeks |
+| [6 — Hardening and release](planning/phase-06-hardening-release.md) | Planned | Compatibility, security review, testing, packaging, documentation | 6–8 weeks |
 
 The focused static-analysis MVP is targeted after Phases 0–2, approximately
 **3–5 months** of full-time solo development. The complete production-quality
@@ -194,24 +257,30 @@ ReverserX/
 The complete design rationale, proposed tool interfaces, dependency list, and
 example end-to-end workflow are in the [original project plan](Plan.md).
 
-## Continuing development
+## Current implementation and next development stage
 
-The Phase 0 foundation now supports these deterministic operations:
+Phase 1 now supports a deterministic Android static pipeline:
 
-1. Install and expose a `reverserx` CLI.
-2. Create and reopen a local project.
-3. Import an artifact without modifying the source file.
-4. Detect installed external tools and record their versions.
-5. Execute a typed example tool with timeouts and bounded output.
-6. Persist the tool run and its evidence in SQLite.
-7. Run unit, lint, format, and type checks through one documented command.
+1. Validate and import standalone APKs, APKM archives, or extracted APKM
+   directories without trusting archive paths.
+2. Preserve base and split identities in immutable, content-addressed storage.
+3. Inventory DEX, resources, assets, native libraries, and conservative v1/v2/
+   v3/v3.1 signing evidence.
+4. Run JADX with bounded output, timeouts, caching, and explicit partial status.
+5. Analyze manifest permissions, exported defaults, inherited guards, providers,
+   and target-SDK-specific semantics with locators.
+6. Chunk Java, Kotlin, and Smali deterministically; persist summaries and
+   artifact-keyed Chroma collections.
+7. Run exact, regex, and hybrid retrieval and pack the result under a hard token
+   budget.
+8. Record obfuscation evidence and render a lineage-checked Markdown report.
 
-The next implementation target is [Phase 1](planning/phase-01-static-context.md):
-APK validation, JADX integration, manifest analysis, source chunking, retrieval,
-context budgets, and measurable obfuscation signals. Before beginning it,
-prepare authorized APK fixtures, establish a provider/API budget, and define the
-first measurable demonstration goal. Remaining owner decisions are listed in
-[NEXT_STEPS.md](planning/NEXT_STEPS.md).
+The next implementation target is [Phase 2](planning/phase-02-agent-router.md):
+the bounded plan-execute-review loop, multimodal model capability routing,
+provider privacy policy, usage accounting, and run budgets. Phase 1 commands are
+usable without any hosted-model key; `hashing` is the deterministic local
+embedding fallback, while Ollama is available as the learned local embedding
+adapter.
 
 ## Planned external dependencies
 
@@ -227,9 +296,9 @@ The eventual feature set expects some or all of the following tools:
 - Hosted model SDKs and/or Ollama
 - Z3 and Smali tooling for later deobfuscation work
 
-Phase 0 will define and publish exact supported versions. Optional integrations
-must fail clearly when they are unavailable rather than preventing unrelated
-features from running.
+The currently exercised static toolchain uses JADX 1.5.6, a compatible Java
+runtime, SQLite, and ChromaDB 1.5.x. Optional integrations must fail clearly when
+they are unavailable rather than preventing unrelated features from running.
 
 ## Safety and authorized use
 

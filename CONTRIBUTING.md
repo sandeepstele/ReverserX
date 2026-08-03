@@ -18,7 +18,7 @@ Install the project and development dependencies:
 ```bash
 git clone https://github.com/sandeepstele/ReverserX.git
 cd ReverserX
-uv sync --extra dev
+uv sync --locked --extra dev --extra phase1
 uv run reverserx --help
 ```
 

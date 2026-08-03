@@ -18,7 +18,7 @@ def test_database_migrations_are_repeatable(tmp_path: Path) -> None:
     database.initialize()
     database.initialize()
 
-    assert database.schema_version() == 1
+    assert database.schema_version() == 3
 
 
 def test_project_session_artifact_and_tool_run_round_trip(tmp_path: Path) -> None:

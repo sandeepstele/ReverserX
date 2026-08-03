@@ -18,6 +18,8 @@ class ToolContext(BaseModel):
 
     project_id: str
     data_dir: Path
+    database_path: Path | None = None
+    artifact_root: Path | None = None
     session_id: str | None = None
 
 
