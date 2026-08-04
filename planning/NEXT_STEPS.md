@@ -1,13 +1,16 @@
 # What You Can Do Now
 
-Phase 0–2 engineering implementation is complete. The immediate objective is to
-finish Phase 1 owner scoring and Phase 2 live-provider/real-fixture acceptance,
-not to treat recorded engineering scenarios as proof of product quality.
+Phase 0–3 engineering implementation is complete. The immediate objective is to
+finish Phase 1 owner scoring, Phase 2 live-provider/real-fixture acceptance, and
+Phase 3 live-device acceptance, not to treat recorded engineering scenarios as
+proof of product quality.
 
 ## Current verified baseline
 
-- The final implementation baseline has 232 passing repository tests with 85%
+- The final implementation baseline has **232 passing repository tests** with 80%
   measured coverage.
+- **24 registered tools** (13 static + 12 dynamic, -1 echo).
+- **4 bundled Frida hook scripts** (crypto, http, pinning, intents).
 - Ruff formatting/linting and strict MyPy validation pass.
 - The controlled production-`ContextService` benchmark records hit@1, hit@3,
   hit@5, and MRR of 1.0.
@@ -178,3 +181,24 @@ environment variables only for approved Phase 2 live-provider evaluation.
   and Phase 2 live acceptance gates close.
 - Do not start Frida, Ghidra, or broad deobfuscation work before the static
   vertical slice receives owner/product acceptance.
+- Do not run Frida injection or proxy capture against production apps or devices
+  without explicit authorization.
+- Do not assume bundled hook scripts are exhaustive; they cover common crypto,
+  HTTP, pinning, and intent patterns — app-specific hooks require generation.
+
+## Remaining Phase 3 live-device acceptance work
+
+Phase 3 engineering implementation is complete. The following live-device gates
+remain:
+
+1. Run `adb_device_list` and `adb_device_info` against a real device or emulator.
+2. Run `frida_ps` and `frida_inject` (with crypto hook) against a test app on a
+   device with frida-server running.
+3. Run `proxy_start` and `proxy_capture_import` with a real HAR file from an
+   authorized capture session.
+4. Verify HAR normalization groups endpoints correctly on real API traffic.
+5. Verify secret redaction strips authorization headers from stored flows.
+6. Run the full agent loop with `dynamic_enabled: true` in project scope to
+   confirm the planner can propose dynamic steps and the scope gate allows them.
+7. Full fixture demo: static crypto finding → Frida hook → captured API flow →
+   correlation record → evidence-linked report.

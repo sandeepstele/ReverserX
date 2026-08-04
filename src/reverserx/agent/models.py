@@ -63,6 +63,11 @@ class WorkingMemory(BaseModel):
     hypotheses: tuple[str, ...] = ()
     key_locations: tuple[str, ...] = ()
     unresolved_items: tuple[str, ...] = ()
+    # Phase 3 — Dynamic analysis state
+    active_device: str | None = None
+    active_frida_session: str | None = None
+    active_proxy_port: int | None = None
+    needs_user_interaction: bool = False
 
 
 class AgentLimits(BaseModel):

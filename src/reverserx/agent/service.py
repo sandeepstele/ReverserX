@@ -542,6 +542,51 @@ class AgentService:
         )
         return self.database.save_plan_step(step)
 
+    @staticmethod
+    def _check_dynamic_scope(project: Project, step: PlanStep) -> None:
+        """Reject dynamic/network steps when project scope doesn't authorize them.
+
+        Raises PlanValidationError if the step targets an unauthorized resource.
+        """
+        tool_name = step.tool_name or ""
+        if not (
+            tool_name.startswith(("adb_", "frida_", "proxy_"))
+            or tool_name in {"interaction_wait"}
+        ):
+            return  # Static tool — always allowed
+
+        scope = project.scope
+        dynamic_enabled = scope.get("dynamic_enabled", False)
+        if not dynamic_enabled:
+            raise PlanValidationError(
+                f"dynamic tool '{tool_name}' requires dynamic_enabled in project scope"
+            )
+
+        args = step.arguments
+        if tool_name.startswith("adb_") or tool_name.startswith("frida_"):
+            serial = args.get("serial")
+            if serial and "devices" in scope:
+                allowed = scope["devices"]
+                if isinstance(allowed, list) and allowed and serial not in allowed:
+                    raise PlanValidationError(
+                        f"device '{serial}' not in project scope devices"
+                    )
+
+        if tool_name.startswith("frida_") or tool_name in {"adb_logcat"}:
+            package = args.get("package")
+            if package and "packages" in scope:
+                allowed = scope["packages"]
+                if isinstance(allowed, list) and allowed and package not in allowed:
+                    raise PlanValidationError(
+                        f"package '{package}' not in project scope packages"
+                    )
+
+        if tool_name.startswith("proxy_"):
+            if not scope.get("allow_proxy", False):
+                raise PlanValidationError(
+                    f"proxy tool '{tool_name}' requires allow_proxy in project scope"
+                )
+
     def _execute_step(
         self,
         *,
@@ -553,6 +598,7 @@ class AgentService:
         if step.tool_name is None:
             raise PlanValidationError(f"plan step {step.id} has no tool")
         self.tools.validate_arguments(step.tool_name, step.arguments)
+        self._check_dynamic_scope(project, step)
         fingerprint = hashlib.sha256(
             json.dumps(
                 [step.tool_name, step.arguments],
@@ -615,11 +661,18 @@ class AgentService:
         )
         self.database.update_plan_step(updated)
         source_references = _source_references(run.tool_name, run.output_data)
+        # Phase 3: map dynamic tools to appropriate evidence kinds
+        if run.tool_name.startswith("frida_"):
+            evidence_kind = EvidenceKind.RUNTIME_EVENT
+        elif run.tool_name.startswith("proxy_"):
+            evidence_kind = EvidenceKind.NETWORK_FLOW
+        else:
+            evidence_kind = EvidenceKind.TOOL_OUTPUT
         evidence = self.database.save_evidence(
             Evidence(
                 project_id=project.id,
                 tool_run_id=run.id,
-                kind=EvidenceKind.TOOL_OUTPUT,
+                kind=evidence_kind,
                 locator=f"tool-run:{run.id}",
                 summary=(
                     f"{run.tool_name} {run.status.value} for plan step {step.sequence}"
@@ -678,43 +731,99 @@ class AgentService:
             max_output_tokens=self.limits.model_output_tokens_per_call,
         )
         response = self._call_model(project, session, request, policy, ledger, started)
+        decision = self._validate_review_decision(response, review_context, policy, project, session, ledger, started)
+        if decision is not None:
+            return decision
+        raise AgentError("reviewer decision remained invalid after one repair")
+
+    def _validate_review_decision(
+        self,
+        response: ModelResponse,
+        review_context: str,
+        policy: ProjectModelPolicy,
+        project: Project,
+        session: AnalysisSession,
+        ledger: _Ledger,
+        started: float,
+    ) -> ReviewerDecision | None:
+        """Validate and optionally repair a reviewer decision.
+
+        Returns a valid ReviewerDecision or None if repair is exhausted.
+        """
         try:
-            return ReviewerDecision.model_validate(response.structured)
+            decision = ReviewerDecision.model_validate(response.structured)
         except ValidationError as first_error:
-            repair_request = ModelRequest(
-                task_type=TaskType.REVIEW,
-                messages=(
-                    ModelMessage(
-                        role=MessageRole.SYSTEM,
-                        parts=(TextPart(text=REVIEWER_SYSTEM),),
-                    ),
-                    ModelMessage(
-                        role=MessageRole.USER,
-                        parts=(
-                            TextPart(
-                                text=review_repair_input(
-                                    review_context,
-                                    response.structured or response.text,
-                                    str(first_error),
-                                    self.tools.list_schemas(),
-                                )
-                            ),
+            return self._repair_review_decision(
+                review_context, str(first_error), response, policy, project, session, ledger, started
+            )
+        # Post-validate action-specific requirements that pydantic can't enforce
+        action_error: str | None = None
+        if decision.action == ReviewAction.REFINE and decision.refined_arguments is None:
+            action_error = (
+                "action is 'refine' but refined_arguments is null — "
+                "provide corrected arguments for the same tool"
+            )
+        elif decision.action == ReviewAction.INJECT and decision.injected_step is None:
+            action_error = (
+                "action is 'inject' but injected_step is null — "
+                "provide the new step to inject"
+            )
+        if action_error is not None:
+            return self._repair_review_decision(
+                review_context, action_error, response, policy, project, session, ledger, started
+            )
+        return decision
+
+    def _repair_review_decision(
+        self,
+        review_context: str,
+        error: str,
+        response: ModelResponse,
+        policy: ProjectModelPolicy,
+        project: Project,
+        session: AnalysisSession,
+        ledger: _Ledger,
+        started: float,
+    ) -> ReviewerDecision | None:
+        """Attempt one repair of a reviewer decision."""
+        repair_request = ModelRequest(
+            task_type=TaskType.REVIEW,
+            messages=(
+                ModelMessage(
+                    role=MessageRole.SYSTEM,
+                    parts=(TextPart(text=REVIEWER_SYSTEM),),
+                ),
+                ModelMessage(
+                    role=MessageRole.USER,
+                    parts=(
+                        TextPart(
+                            text=review_repair_input(
+                                review_context,
+                                response.structured or response.text,
+                                error,
+                                self.tools.list_schemas(),
+                            )
                         ),
                     ),
                 ),
-                output_schema=ReviewerDecision.model_json_schema(),
-                output_schema_name="reverserx_review_repair",
-                max_output_tokens=self.limits.model_output_tokens_per_call,
-            )
-            repaired = self._call_model(
-                project, session, repair_request, policy, ledger, started
-            )
-            try:
-                return ReviewerDecision.model_validate(repaired.structured)
-            except ValidationError as exc:
-                raise AgentError(
-                    f"reviewer decision remained invalid after one repair: {exc}"
-                ) from exc
+            ),
+            output_schema=ReviewerDecision.model_json_schema(),
+            output_schema_name="reverserx_review_repair",
+            max_output_tokens=self.limits.model_output_tokens_per_call,
+        )
+        repaired = self._call_model(
+            project, session, repair_request, policy, ledger, started
+        )
+        try:
+            decision = ReviewerDecision.model_validate(repaired.structured)
+        except ValidationError:
+            return None
+        # Re-check action-specific requirements on repaired decision
+        if decision.action == ReviewAction.REFINE and decision.refined_arguments is None:
+            return None
+        if decision.action == ReviewAction.INJECT and decision.injected_step is None:
+            return None
+        return decision
 
     def _record_review(
         self,

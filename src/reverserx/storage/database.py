@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from reverserx.core.correlation import CorrelationRecord
 from reverserx.core.models import (
     AgentCheckpoint,
     AnalysisSession,
@@ -338,6 +339,27 @@ MIGRATIONS: tuple[tuple[int, str], ...] = (
         );
 
         CREATE INDEX idx_plan_attempts_session ON plan_attempts(session_id);
+        """,
+    ),
+    (
+        6,
+        """
+        CREATE TABLE correlation_records (
+            id TEXT PRIMARY KEY,
+            schema_version TEXT NOT NULL,
+            project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+            source_evidence_id TEXT,
+            runtime_evidence_id TEXT,
+            network_evidence_id TEXT,
+            relationship TEXT NOT NULL,
+            confidence REAL NOT NULL DEFAULT 0.5,
+            description TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL
+        );
+
+        CREATE INDEX idx_correlation_records_project ON correlation_records(project_id);
+        CREATE INDEX idx_correlation_records_session ON correlation_records(session_id);
         """,
     ),
 )
@@ -818,6 +840,51 @@ class Database:
         return _checkpoint_from_row(row) if row is not None else None
 
 
+    # --- Correlation Records (Phase 3) ---
+
+    def create_correlation(self, record: CorrelationRecord) -> CorrelationRecord:
+        with self.connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO correlation_records
+                (id, schema_version, project_id, session_id, source_evidence_id,
+                 runtime_evidence_id, network_evidence_id, relationship, confidence,
+                 description, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    record.id,
+                    record.schema_version,
+                    record.project_id,
+                    record.session_id,
+                    record.source_evidence_id,
+                    record.runtime_evidence_id,
+                    record.network_evidence_id,
+                    record.relationship,
+                    record.confidence,
+                    record.description,
+                    record.created_at.isoformat(),
+                ),
+            )
+        return record
+
+    def list_correlations(self, project_id: str) -> list[CorrelationRecord]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM correlation_records WHERE project_id = ? ORDER BY created_at DESC",
+                (project_id,),
+            ).fetchall()
+        return [_correlation_from_row(row) for row in rows]
+
+    def list_correlations_for_session(self, session_id: str) -> list[CorrelationRecord]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM correlation_records WHERE session_id = ? ORDER BY created_at",
+                (session_id,),
+            ).fetchall()
+        return [_correlation_from_row(row) for row in rows]
+
+
 def _json(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
@@ -991,6 +1058,23 @@ def _checkpoint_from_row(row: sqlite3.Row) -> AgentCheckpoint:
             "session_id": row["session_id"],
             "sequence": row["sequence"],
             "state": json.loads(row["state_json"]),
+            "created_at": row["created_at"],
+        }
+    )
+
+
+def _correlation_from_row(row: sqlite3.Row) -> CorrelationRecord:
+    return CorrelationRecord.model_validate(
+        {
+            "id": row["id"],
+            "project_id": row["project_id"],
+            "session_id": row["session_id"],
+            "source_evidence_id": row["source_evidence_id"],
+            "runtime_evidence_id": row["runtime_evidence_id"],
+            "network_evidence_id": row["network_evidence_id"],
+            "relationship": row["relationship"],
+            "confidence": row["confidence"],
+            "description": row["description"],
             "created_at": row["created_at"],
         }
     )

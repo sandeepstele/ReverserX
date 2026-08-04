@@ -211,6 +211,115 @@ class OllamaProvider(ModelProvider):
         )
 
 
+class DeepSeekProvider(ModelProvider):
+    """DeepSeek Chat Completions API provider (OpenAI-compatible)."""
+
+    def __init__(
+        self,
+        capability: ModelCapability,
+        api_key: str,
+        *,
+        base_url: str = "https://api.deepseek.com/v1",
+        timeout_seconds: float = 120,
+        transport: JsonTransport | None = None,
+    ) -> None:
+        self.capability = capability
+        self.api_key = api_key
+        self.base_url = base_url.rstrip("/")
+        self.timeout_seconds = timeout_seconds
+        self.transport = transport or _post_json
+
+    def generate(self, request: ModelRequest) -> ModelResponse:
+        from reverserx.ai.models import ModelMessage
+
+        messages: list[dict[str, object]] = []
+        for msg_raw in request.messages:
+            msg = ModelMessage.model_validate(msg_raw)
+            parts_text: list[str] = []
+            for part in msg.parts:
+                if isinstance(part, TextPart):
+                    parts_text.append(part.text)
+                elif isinstance(part, CodePart):
+                    parts_text.append(_render_code(part))
+                elif isinstance(part, ImagePart):
+                    parts_text.append(
+                        f"[image evidence {part.sha256} at {part.evidence_locator}]"
+                    )
+                else:
+                    parts_text.append(_render_artifact(part))
+            content = "\n\n".join(parts_text)
+            # DeepSeek supports "system" role
+            role = "system" if msg.role.value == "system" else (
+                "assistant" if msg.role.value == "assistant" else "user"
+            )
+            messages.append({"role": role, "content": content})
+
+        payload: dict[str, object] = {
+            "model": self.capability.model,
+            "messages": messages,
+            "max_tokens": request.max_output_tokens,
+            "temperature": 0,
+            "stream": False,
+        }
+        if request.output_schema is not None:
+            # Embed schema name in the system prompt; DeepSeek json_object
+            # mode produces valid JSON but not schema-guaranteed output.
+            payload["response_format"] = {"type": "json_object"}
+            schema_hint = (
+                f"Respond ONLY with a JSON object conforming to this schema:\n"
+                f"{json.dumps(request.output_schema, sort_keys=True)}\n"
+                f"Schema name: {request.output_schema_name}"
+            )
+            if messages and messages[0]["role"] == "system":
+                messages[0]["content"] = (
+                    f"{messages[0]['content']}\n\n{schema_hint}"
+                )
+            else:
+                messages.insert(0, {"role": "system", "content": schema_hint})
+
+        response = self.transport(
+            f"{self.base_url}/chat/completions",
+            payload,
+            {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            self.timeout_seconds,
+        )
+        text = _deepseek_output_text(response)
+        usage_data = response.get("usage")
+        usage = usage_data if isinstance(usage_data, dict) else {}
+        structured = _parse_structured(text, request.output_schema is not None)
+        return ModelResponse(
+            provider=self.capability.provider,
+            model=self.capability.model,
+            text=text,
+            structured=structured,
+            usage=TokenUsage(
+                input_tokens=_integer(usage.get("prompt_tokens")),
+                output_tokens=_integer(usage.get("completion_tokens")),
+                image_tokens=0,  # DeepSeek does not support image inputs
+            ),
+            request_id=_optional_string(response.get("id")),
+        )
+
+
+def _deepseek_output_text(response: dict[str, object]) -> str:
+    choices = response.get("choices")
+    if not isinstance(choices, list) or len(choices) == 0:
+        raise ProviderError("DeepSeek response has no choices")
+    first = choices[0]
+    if not isinstance(first, dict):
+        raise ProviderError("DeepSeek choice is not an object")
+    message = first.get("message")
+    if not isinstance(message, dict):
+        raise ProviderError("DeepSeek choice has no message")
+    content = message.get("content")
+    if not isinstance(content, str):
+        raise ProviderError("DeepSeek message has no text content")
+    return content
+
+
 def _openai_message(message: object) -> dict[str, object]:
     from reverserx.ai.models import ModelMessage
 

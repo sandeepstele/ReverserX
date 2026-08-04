@@ -45,6 +45,54 @@ evidence.
 - A fixture demonstration connects a static crypto method to a runtime hook event
   and a captured API field with reproducible evidence.
 
+## Implemented baseline
+
+- 12 dynamic tools registered: `adb_device_list`, `adb_device_info`, `adb_shell`,
+  `adb_logcat`, `frida_ps`, `frida_hook_list`, `frida_inject`, `proxy_start`,
+  `proxy_stop`, `proxy_capture_import`, `proxy_flow_list`, `interaction_wait`.
+- 4 bundled versioned Frida hook scripts: `crypto.js` (Cipher, SecretKeySpec, Mac),
+  `http.js` (OkHttp, HttpURLConnection), `pinning.js` (SSL/TLS, CertificatePinner),
+  `intents.js` (Intent construction, startActivity, sendBroadcast).
+- `AdbClient` wrapper over `run_command()` with `AdbError` domain errors.
+- `FridaSession` utilities: version probe, process listing, hook script loading
+  with template substitution, structured JSON event parsing from Frida output.
+- HAR import and normalization: URL path variable collapsing (`{id}`, `{uuid}`,
+  `{token}`), endpoint grouping, secret header redaction (Authorization, Cookie,
+  Set-Cookie → sha256 hashes).
+- `CorrelationRecord` model and SQLite persistence (migration v6).
+- Project scope gate: `_check_dynamic_scope()` in agent loop validates
+  `dynamic_enabled`, package allowlists, device allowlists, and `allow_proxy`
+  before executing dynamic tools.
+- Agent prompt updates: planner and reviewer are now dynamic-aware.
+- `WorkingMemory` extended with `active_device`, `active_frida_session`,
+  `active_proxy_port`, `needs_user_interaction`.
+- Evidence kind routing: Frida tools → `RUNTIME_EVENT`, proxy tools →
+  `NETWORK_FLOW`, static/ADB tools → `TOOL_OUTPUT`.
+- `device` and `proxy` CLI command groups with 7 commands.
+- 9 new config fields with env var mappings.
+- All tools handle missing binaries gracefully without crashing.
+
+## Acceptance record
+
+- [x] Project scope gate rejects dynamic tools when `dynamic_enabled` is false.
+- [x] Package allowlist enforced for Frida/ADB tools.
+- [x] Host allowlist (for proxy) and `allow_proxy` flag enforced.
+- [x] Hook scripts are versioned (`// @version 1.0.0`) and content-fingerprinted.
+- [x] Proxy secrets (Authorization, Cookie, Set-Cookie) are redacted to content
+  hashes before persistence.
+- [x] HAR URL normalization collapses variable IDs while preserving original URLs.
+- [x] Dynamic tools handle missing external binaries gracefully (ADB, Frida,
+  mitmproxy).
+- [x] Correlation record model and SQLite table link static, runtime, and network
+  evidence.
+- [x] 232 repository tests pass with no regressions.
+- [ ] Live-device acceptance: run ADB tools against a real device/emulator.
+- [ ] Live Frida injection and event capture against the authorized fixture app.
+- [ ] Live mitmproxy capture, HAR import, and endpoint grouping.
+- [ ] Full fixture demo: static crypto method → runtime Frida hook → captured API
+  field → correlation record → evidence-linked report.
+- [ ] Device disconnect, app crash, and Frida detach recovery testing.
+
 ## What you can do
 
 - Prepare a dedicated emulator and an app you control for runtime testing.

@@ -9,6 +9,20 @@ from pydantic import BaseModel, ValidationError
 
 from reverserx.reporting import AgentReportTool, StaticReportTool
 from reverserx.tools.base import BaseTool, ToolContext, ToolExecution
+from reverserx.tools.dynamic import (
+    AdbDeviceInfoTool,
+    AdbDeviceListTool,
+    AdbLogcatTool,
+    AdbShellTool,
+    FridaHookListTool,
+    FridaInjectTool,
+    FridaPsTool,
+    InteractionWaitTool,
+    ProxyCaptureImportTool,
+    ProxyFlowListTool,
+    ProxyStartTool,
+    ProxyStopTool,
+)
 from reverserx.tools.example import EchoTool
 from reverserx.tools.static import (
     ApkBundleImportTool,
@@ -85,4 +99,17 @@ def build_default_registry() -> ToolRegistry:
     registry.register(ContextQueryTool())
     registry.register(StaticReportTool())
     registry.register(AgentReportTool())
+    # Phase 3 — Dynamic analysis tools
+    registry.register(AdbDeviceListTool())
+    registry.register(AdbDeviceInfoTool())
+    registry.register(AdbShellTool())
+    registry.register(AdbLogcatTool())
+    registry.register(FridaPsTool())
+    registry.register(FridaHookListTool())
+    registry.register(FridaInjectTool())
+    registry.register(ProxyStartTool())
+    registry.register(ProxyStopTool())
+    registry.register(ProxyCaptureImportTool())
+    registry.register(ProxyFlowListTool())
+    registry.register(InteractionWaitTool())
     return registry

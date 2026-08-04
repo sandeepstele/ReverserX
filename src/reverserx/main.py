@@ -59,6 +59,10 @@ app.add_typer(source_app, name="source")
 app.add_typer(context_app, name="context")
 app.add_typer(obfuscation_app, name="obfuscation")
 app.add_typer(report_app, name="report")
+device_app = typer.Typer(help="Manage connected Android devices through ADB.")
+proxy_app_cli = typer.Typer(help="Start, stop, and inspect the HTTPS proxy capture.")
+app.add_typer(device_app, name="device")
+app.add_typer(proxy_app_cli, name="proxy")
 app.add_typer(agent_app, name="agent")
 
 
@@ -1107,6 +1111,141 @@ def tool_run(
         _tool_run_payload(run),
         f"Tool {tool_name} succeeded ({run.id})\n{run.output_data}",
     )
+
+
+# --- Device (ADB) commands (Phase 3) ---
+
+
+@device_app.command("list")
+def device_list(ctx: typer.Context) -> None:
+    """List connected ADB devices."""
+    run = _run_cli_tool(ctx, "", "adb_device_list", {})
+    devices = run.output_data.get("devices", [])
+    if _state(ctx).json_output:
+        _print_json(run.output_data)
+        return
+    if not devices:
+        console.print("No devices connected.")
+        return
+    table = Table(title="Connected Devices")
+    table.add_column("Serial")
+    table.add_column("State")
+    table.add_column("Model")
+    table.add_column("Product")
+    for d in devices:
+        table.add_row(d.get("serial", ""), d.get("state", ""), d.get("model", ""), d.get("product", ""))
+    console.print(table)
+
+
+@device_app.command("info")
+def device_info(
+    ctx: typer.Context,
+    serial: Annotated[str, typer.Argument(help="Device serial number.")],
+) -> None:
+    """Show detailed diagnostics for a device."""
+    run = _run_cli_tool(ctx, "", "adb_device_info", {"serial": serial})
+    info = run.output_data
+    if _state(ctx).json_output:
+        _print_json(info)
+        return
+    console.print(f"[bold]Device:[/bold] {info.get('serial', serial)}")
+    console.print(f"  Connected: {info.get('connected', False)}")
+    console.print(f"  Android: {info.get('android_version', 'unknown')}")
+    console.print(f"  ABI: {info.get('abi', 'unknown')}")
+    console.print(f"  SDK: {info.get('sdk', 'unknown')}")
+    console.print(f"  Root: {info.get('root', False)}")
+
+
+@device_app.command("shell")
+def device_shell(
+    ctx: typer.Context,
+    serial: Annotated[str, typer.Argument(help="Device serial number.")],
+    command: Annotated[str, typer.Argument(help="Shell command to execute.")],
+    project: Annotated[str, typer.Option("--project", "-p", help="Project slug or ID.")] = "",
+) -> None:
+    """Execute a shell command on a device."""
+    run = _run_cli_tool(ctx, project, "adb_shell", {"serial": serial, "command": command})
+    output = run.output_data
+    if _state(ctx).json_output:
+        _print_json(output)
+        return
+    console.print(output.get("stdout", ""))
+    if output.get("stderr"):
+        console.print(f"[dim]{output['stderr']}[/dim]")
+
+
+# --- Proxy commands (Phase 3) ---
+
+
+@proxy_app_cli.command("start")
+def proxy_start(
+    ctx: typer.Context,
+    project: Annotated[str, typer.Argument(help="Project slug or ID.")],
+    port: Annotated[int, typer.Option("--port", "-p", help="Proxy listen port.")] = 8080,
+) -> None:
+    """Start the mitmproxy capture proxy."""
+    run = _run_cli_tool(ctx, project, "proxy_start", {"port": port})
+    output = run.output_data
+    if _state(ctx).json_output:
+        _print_json(output)
+        return
+    console.print(f"Proxy status: {output.get('status', 'unknown')}")
+    console.print(f"Proxy URL: {output.get('proxy_url', '')}")
+
+
+@proxy_app_cli.command("stop")
+def proxy_stop(
+    ctx: typer.Context,
+    project: Annotated[str, typer.Argument(help="Project slug or ID.")],
+) -> None:
+    """Stop the running proxy and collect captured flows."""
+    run = _run_cli_tool(ctx, project, "proxy_stop", {})
+    output = run.output_data
+    if _state(ctx).json_output:
+        _print_json(output)
+        return
+    console.print(f"Proxy status: {output.get('status', 'stopped')}")
+    console.print(f"Flows captured: {output.get('flows_captured', 0)}")
+
+
+@proxy_app_cli.command("import")
+def proxy_import(
+    ctx: typer.Context,
+    project: Annotated[str, typer.Argument(help="Project slug or ID.")],
+    har_file: Annotated[str, typer.Argument(help="Path to HAR file.")],
+) -> None:
+    """Import a HAR file and normalize captured API flows."""
+    run = _run_cli_tool(ctx, project, "proxy_capture_import", {"har_path": har_file})
+    output = run.output_data
+    if _state(ctx).json_output:
+        _print_json(output)
+        return
+    console.print(f"Flows imported: {output.get('flows_imported', 0)}")
+    console.print(f"Endpoints grouped: {output.get('endpoint_count', 0)}")
+
+
+@proxy_app_cli.command("flows")
+def proxy_flows(
+    ctx: typer.Context,
+    project: Annotated[str, typer.Argument(help="Project slug or ID.")],
+) -> None:
+    """List captured API flows."""
+    run = _run_cli_tool(ctx, project, "proxy_flow_list", {})
+    output = run.output_data
+    if _state(ctx).json_output:
+        _print_json(output)
+        return
+    flows = output.get("flows", [])
+    if not flows:
+        console.print("No captured flows. Import a HAR file first.")
+        return
+    table = Table(title="Captured Flows")
+    table.add_column("Method")
+    table.add_column("URL")
+    table.add_column("Status")
+    for f in flows[:50]:
+        table.add_row(f.get("method", ""), str(f.get("url", ""))[:80], str(f.get("status", "")))
+    console.print(table)
 
 
 def _run_cli_tool(

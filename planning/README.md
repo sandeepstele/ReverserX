@@ -37,8 +37,17 @@ native binary analysis remain in scope.
   owner/product acceptance remain pending.** Recorded scenarios cover the
   bounded state machine, invalid-plan repair, privacy-aware multimodal routing,
   hard cost/step stops, evidence-linked findings, checkpoints, and Markdown
-  agent reports. Live Ollama/OpenAI evaluation on the authorized fixture remains
-  open.
+  agent reports. DeepSeek Chat Completions provider added alongside Ollama
+  and OpenAI. A reviewer REFINE/INJECT repair bug was fixed during live testing.
+- **Phase 3 engineering implementation is complete; live-device and
+  owner/product acceptance remain pending.** ADB device management (list,
+  info, shell, logcat), Frida session tools (ps, hook-list, inject with 4
+  bundled hook scripts for crypto, HTTP, pinning, and intents), mitmproxy
+  lifecycle (start, stop, HAR import, flow listing), manual interaction
+  checkpoints, HAR/flow normalization with secret redaction, correlation
+  records, dynamic-enabled project scope gates, and dynamic-aware agent prompts
+  are implemented. 12 new tools registered, 4 bundled Frida hooks shipped.
+  232 tests pass with no regressions.
 
 APK signing certificate, signature, and public-key evidence is inventoried and
 fingerprinted, but it is not cryptographically verified. The project must not
@@ -65,7 +74,7 @@ evidence must remain distinct.
 | [0 — Foundation](phase-00-foundation.md) | Installable CLI, contracts, storage, configuration, safe process execution | Complete | 2–3 weeks |
 | [1 — Android Static Intelligence](phase-01-static-context.md) | APK ingestion, JADX analysis, context retrieval, initial obfuscation detection | Engineering accepted; owner/product acceptance pending | 6–8 weeks |
 | [2 — Agent and Model Routing](phase-02-agent-router.md) | Planner/executor/reviewer loop, multimodal routing, cost controls | Engineering implemented; live acceptance pending | 5–7 weeks |
-| [3 — Dynamic and API Loop](phase-03-dynamic-api.md) | ADB/Frida/mitmproxy workflow correlated with static findings | Planned | 6–9 weeks |
+| [3 — Dynamic and API Loop](phase-03-dynamic-api.md) | ADB/Frida/mitmproxy workflow correlated with static findings | Engineering implemented; live-device acceptance pending | 6–9 weeks |
 | [4 — Native and Deobfuscation](phase-04-native-deobfuscation.md) | Ghidra integration, packer/CFF analysis, Java-to-JNI tracing | Planned | 8–12 weeks |
 | [5 — Persistence and Reporting](phase-05-persistence-reporting.md) | Reliable resume, evidence provenance, Markdown and HTML reports | Planned | 4–6 weeks |
 | [6 — Hardening and Release](phase-06-hardening-release.md) | Compatibility testing, packaging, safety controls, documentation | Planned | 6–8 weeks |
@@ -77,9 +86,9 @@ estimate remains **11–17 months**. Actual work completed in Phases 0–2 does
 not remove the uncertainty in dynamic instrumentation, native analysis, and
 agent reliability.
 
-The focused static-analysis MVP implementation now spans Phases 0–2. It is not
-release-accepted until Phase 1 owner scoring and Phase 2 live-provider,
-cost/quality, interruption, and real-fixture acceptance are recorded.
+The current implementation spans Phases 0–3. Phase 1 and 2 owner/product
+acceptance, Phase 2 hosted-provider comparison, and Phase 3 live-device
+acceptance remain open before release to trusted testers.
 
 ## Scope boundaries
 

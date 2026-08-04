@@ -49,6 +49,20 @@ class Settings(BaseModel):
     ollama_model: str = "gpt-oss:20b"
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_image_support: bool = False
+    deepseek_model: str = "deepseek-chat"
+    deepseek_base_url: str = "https://api.deepseek.com/v1"
+    deepseek_input_cost_per_million: float = Field(default=0.27, ge=0)
+    deepseek_output_cost_per_million: float = Field(default=1.10, ge=0)
+    # Dynamic analysis (Phase 3)
+    dynamic_enabled: bool = False
+    adb_executable: str = "adb"
+    frida_executable: str = "frida"
+    mitmproxy_executable: str = "mitmdump"
+    adb_timeout_seconds: float = Field(default=30, gt=0)
+    frida_script_timeout_seconds: float = Field(default=120, gt=0)
+    mitmproxy_port: int = Field(default=8080, ge=1024, le=65535)
+    mitmproxy_startup_timeout_seconds: float = Field(default=15, gt=0)
+    max_replay_rate: float = Field(default=1.0, ge=0)
     provider_timeout_seconds: float = Field(default=120, gt=0)
     anthropic_api_key: SecretStr | None = None
     deepseek_api_key: SecretStr | None = None
@@ -154,6 +168,19 @@ def _read_environment(environ: Mapping[str, str]) -> dict[str, Any]:
         "REVERSERX_PROVIDER_TIMEOUT_SECONDS": "provider_timeout_seconds",
         "ANTHROPIC_API_KEY": "anthropic_api_key",
         "DEEPSEEK_API_KEY": "deepseek_api_key",
+        "DEEPSEEK_MODEL": "deepseek_model",
+        "DEEPSEEK_BASE_URL": "deepseek_base_url",
+        "DEEPSEEK_INPUT_COST_PER_MILLION": "deepseek_input_cost_per_million",
+        "DEEPSEEK_OUTPUT_COST_PER_MILLION": "deepseek_output_cost_per_million",
+        "REVERSERX_DYNAMIC_ENABLED": "dynamic_enabled",
+        "REVERSERX_ADB_EXECUTABLE": "adb_executable",
+        "REVERSERX_FRIDA_EXECUTABLE": "frida_executable",
+        "REVERSERX_MITMPROXY_EXECUTABLE": "mitmproxy_executable",
+        "REVERSERX_ADB_TIMEOUT_SECONDS": "adb_timeout_seconds",
+        "REVERSERX_FRIDA_SCRIPT_TIMEOUT_SECONDS": "frida_script_timeout_seconds",
+        "REVERSERX_MITMPROXY_PORT": "mitmproxy_port",
+        "REVERSERX_MITMPROXY_STARTUP_TIMEOUT_SECONDS": "mitmproxy_startup_timeout_seconds",
+        "REVERSERX_MAX_REPLAY_RATE": "max_replay_rate",
         "OPENAI_API_KEY": "openai_api_key",
     }
     values: dict[str, Any] = {}
