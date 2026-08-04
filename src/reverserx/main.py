@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import json
-import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Any, NoReturn
+from typing import Annotated, Any
 
 import typer
 from pydantic import BaseModel, ValidationError
@@ -16,7 +15,7 @@ from rich.table import Table
 
 from reverserx import __version__
 from reverserx.agent import AgentLimits, AgentService
-from reverserx.ai import ModelRouter, ProjectModelPolicy, build_provider_registry
+from reverserx.ai.factory import build_provider
 from reverserx.config import Settings, SettingsError
 from reverserx.core.models import Artifact, Project, ToolRun, ToolRunStatus, utc_now
 from reverserx.storage import (
@@ -137,11 +136,7 @@ def global_options(
         _fail(str(exc))
     secrets = (
         secret.get_secret_value()
-        for secret in (
-            settings.anthropic_api_key,
-            settings.deepseek_api_key,
-            settings.openai_api_key,
-        )
+        for secret in (settings.deepseek_api_key,)
         if secret is not None
     )
     configure_logging(settings.log_level, secrets)
@@ -207,27 +202,15 @@ def agent_estimate(
     ctx: typer.Context,
     project: Annotated[str, typer.Argument(help="Project slug or ID.")],
     goal: Annotated[str, typer.Argument(help="Authorized analysis goal.")],
-    local_only: Annotated[
-        bool,
-        typer.Option(help="Require all model processing to stay local."),
-    ] = False,
-    provider: Annotated[
-        list[str] | None,
-        typer.Option("--provider", help="Preferred provider; repeatable."),
-    ] = None,
+
 ) -> None:
     """Estimate the bounded run before any model request is sent."""
 
     runtime = _runtime(ctx)
     resolved_project = _get_project_from_runtime(runtime, project)
-    service, policy = _agent_runtime(
-        runtime,
-        project=resolved_project,
-        local_only=local_only,
-        providers=tuple(provider or ()),
-    )
+    service = _agent_runtime(runtime)
     try:
-        estimate = service.estimate(project=resolved_project, goal=goal, policy=policy)
+        estimate = service.estimate(project=resolved_project, goal=goal)
     except (ValueError, RuntimeError) as exc:
         _fail(str(exc))
     _emit(
@@ -251,27 +234,15 @@ def agent_run(
         bool,
         typer.Option("--yes", help="Confirm the displayed model-cost estimate."),
     ] = False,
-    local_only: Annotated[
-        bool,
-        typer.Option(help="Require all model processing to stay local."),
-    ] = False,
-    provider: Annotated[
-        list[str] | None,
-        typer.Option("--provider", help="Preferred provider; repeatable."),
-    ] = None,
+
 ) -> None:
     """Execute a confirmed, bounded static-analysis agent session."""
 
     runtime = _runtime(ctx)
     resolved_project = _get_project_from_runtime(runtime, project)
-    service, policy = _agent_runtime(
-        runtime,
-        project=resolved_project,
-        local_only=local_only,
-        providers=tuple(provider or ()),
-    )
+    service = _agent_runtime(runtime)
     try:
-        estimate = service.estimate(project=resolved_project, goal=goal, policy=policy)
+        estimate = service.estimate(project=resolved_project, goal=goal)
     except (ValueError, RuntimeError) as exc:
         _fail(str(exc))
     if not yes:
@@ -286,7 +257,7 @@ def agent_run(
         )
         raise typer.Exit(code=2)
     try:
-        result = service.run(project=resolved_project, goal=goal, policy=policy)
+        result = service.run(project=resolved_project, goal=goal)
     except (ValueError, RuntimeError) as exc:
         _fail(str(exc))
     _emit(
@@ -403,7 +374,7 @@ def project_create(
         list[str] | None,
         typer.Option("--host", help="Authorized API host; repeatable."),
     ] = None,
-    local_models_only: Annotated[
+    local_models_only: Annotated[  # noqa: ARG001
         bool,
         typer.Option(
             "--local-models-only",
@@ -418,7 +389,6 @@ def project_create(
     scope = {
         "packages": sorted(package or []),
         "hosts": sorted(host or []),
-        "model_policy": {"local_only": local_models_only},
     }
     try:
         project = runtime.database.create_project(
@@ -1717,106 +1687,26 @@ def _runtime(ctx: typer.Context) -> Runtime:
         _fail(f"cannot initialize ReverserX: {exc}")
 
 
-def _agent_runtime(
-    runtime: Runtime,
-    *,
-    project: Project,
-    local_only: bool,
-    providers: tuple[str, ...],
-) -> tuple[AgentService, ProjectModelPolicy]:
-    configured = build_provider_registry(runtime.settings)
-    service = AgentService(
+def _agent_runtime(runtime: Runtime) -> AgentService:
+    provider = build_provider(runtime.settings)
+    if provider is None:
+        raise ValueError("DEEPSEEK_API_KEY not set — cannot run agent")
+    limits = AgentLimits(
+        max_steps=runtime.settings.max_agent_steps,
+        max_retries=runtime.settings.max_tool_retries,
+        max_cost_usd=999,
+        max_input_tokens=runtime.settings.max_agent_input_tokens,
+        max_output_tokens=runtime.settings.max_agent_output_tokens,
+        wall_time_seconds=runtime.settings.max_agent_wall_time_seconds,
+        tool_duration_seconds=runtime.settings.max_tool_duration_seconds,
+        model_output_tokens_per_call=runtime.settings.model_output_tokens_per_call,
+    )
+    return AgentService(
         database=runtime.database,
         tools=runtime.tools,
-        providers=configured,
-        router=ModelRouter(configured.capabilities()),
+        provider=provider,
         data_dir=runtime.settings.data_dir,
         artifact_root=runtime.settings.artifact_root,
-        limits=AgentLimits(
-            max_steps=runtime.settings.max_agent_steps,
-            max_retries=runtime.settings.max_tool_retries,
-            max_input_tokens=runtime.settings.max_agent_input_tokens,
-            max_output_tokens=runtime.settings.max_agent_output_tokens,
-            max_cost_usd=runtime.settings.max_run_cost_usd,
-            max_wall_time_seconds=runtime.settings.max_agent_wall_time_seconds,
-            max_tool_duration_seconds=runtime.settings.max_tool_duration_seconds,
-            model_output_tokens_per_call=(
-                runtime.settings.model_output_tokens_per_call
-            ),
-        ),
+        limits=limits,
     )
-    raw_model_policy = project.scope.get("model_policy")
-    project_local_only = (
-        bool(raw_model_policy.get("local_only", False))
-        if isinstance(raw_model_policy, dict)
-        else False
-    )
-    policy = ProjectModelPolicy(
-        hosted_enabled=runtime.settings.hosted_models_enabled,
-        local_only=local_only or project_local_only,
-        preferred_providers=providers,
-    )
-    return service, policy
 
-
-def _get_project(ctx: typer.Context, reference: str) -> Project:
-    return _get_project_from_runtime(_runtime(ctx), reference)
-
-
-def _get_project_from_runtime(runtime: Runtime, reference: str) -> Project:
-    try:
-        return runtime.database.get_project(reference)
-    except NotFoundError as exc:
-        _fail(str(exc))
-
-
-def _slugify(name: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
-    if not slug:
-        raise typer.BadParameter("project name cannot produce an empty slug")
-    return slug
-
-
-def _source_index_warning_text(output_data: dict[str, Any]) -> str:
-    raw_count = output_data.get("source_index_warning_count", 0)
-    warning_count = raw_count if isinstance(raw_count, int) else 0
-    raw_warnings = output_data.get("source_index_warnings", [])
-    warnings = raw_warnings if isinstance(raw_warnings, list) else []
-    lines: list[str] = []
-    for warning in warnings:
-        if not isinstance(warning, dict):
-            continue
-        path = warning.get("path")
-        reason = warning.get("reason")
-        detail = warning.get("detail")
-        if not all(isinstance(value, str) for value in (path, reason, detail)):
-            continue
-        lines.append(f"- {path} ({reason}): {detail}")
-    omitted = max(0, warning_count - len(lines))
-    if omitted:
-        lines.append(f"- (+{omitted} additional warnings omitted)")
-    return "\n" + "\n".join(lines) if lines else ""
-
-
-def _emit(ctx: typer.Context, data: Any, human: str) -> None:
-    if _state(ctx).json_output:
-        _print_json(data)
-    else:
-        console.print(human)
-
-
-def _print_json(data: Any) -> None:
-    console.print_json(json.dumps(data, default=str, sort_keys=True))
-
-
-def _fail(message: str) -> NoReturn:
-    error_console.print(f"[red]Error:[/red] {message}")
-    raise typer.Exit(code=1)
-
-
-def main() -> None:
-    app()
-
-
-if __name__ == "__main__":
-    main()

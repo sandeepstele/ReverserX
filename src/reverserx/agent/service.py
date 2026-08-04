@@ -6,7 +6,6 @@ import hashlib
 import json
 import re
 import time
-from dataclasses import dataclass
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -33,18 +32,15 @@ from reverserx.agent.prompts import (
     reviewer_input,
 )
 from reverserx.ai import (
+    DeepSeekProvider,
     MessageRole,
     ModelMessage,
     ModelRequest,
     ModelResponse,
     ModelRouter,
-    ProjectModelPolicy,
     ProviderError,
-    ProviderRegistry,
-    TaskType,
     TextPart,
 )
-from reverserx.ai.models import CostEstimate, ModelCapability
 from reverserx.core.models import (
     AgentCheckpoint,
     AnalysisSession,
@@ -67,29 +63,20 @@ from reverserx.tools import ToolContext, ToolRegistry
 from reverserx.tools.registry import ToolRegistryError
 
 
-@dataclass(slots=True)
-class _Ledger:
-    input_tokens: int = 0
-    output_tokens: int = 0
-    actual_cost_usd: float = 0
-
-
 class AgentService:
     def __init__(
         self,
         *,
         database: Database,
         tools: ToolRegistry,
-        providers: ProviderRegistry,
-        router: ModelRouter,
+        provider: DeepSeekProvider,
         data_dir: Path,
         artifact_root: Path,
         limits: AgentLimits,
     ) -> None:
         self.database = database
         self.tools = tools
-        self.providers = providers
-        self.router = router
+        self.router = ModelRouter(provider)
         self.data_dir = data_dir
         self.artifact_root = artifact_root
         self.limits = limits
@@ -99,19 +86,14 @@ class AgentService:
         *,
         project: Project,
         goal: str,
-        policy: ProjectModelPolicy,
     ) -> AgentRunEstimate:
-        request = self._planning_request(project, goal)
-        capability = self.router.route(request, policy)
-        one_call = self.router.estimate(request, capability)
         calls = self.limits.max_steps + 2
+        est = self.router.estimate(ModelRequest(messages=()))
         return AgentRunEstimate(
-            provider=capability.provider,
-            model=capability.model,
+            provider="deepseek",
+            model=str(est.get("model", "deepseek-chat")),
             projected_model_calls=calls,
-            projected_input_tokens=one_call.input_tokens * calls,
-            projected_output_tokens=one_call.output_tokens * calls,
-            projected_cost_usd=round(one_call.estimated_cost_usd * calls, 8),
+            projected_cost_usd=0.0,
         )
 
     def run(
@@ -119,13 +101,11 @@ class AgentService:
         *,
         project: Project,
         goal: str,
-        policy: ProjectModelPolicy,
     ) -> AgentRunResult:
         normalized_goal = goal.strip()
         if not normalized_goal:
             raise ValueError("analysis goal cannot be blank")
         started = time.monotonic()
-        ledger = _Ledger()
         memory = WorkingMemory()
         session = self.database.create_session(
             AnalysisSession(
@@ -141,8 +121,7 @@ class AgentService:
                 project=project,
                 session=session,
                 goal=normalized_goal,
-                policy=policy,
-                ledger=ledger,
+
                 started=started,
             )
             steps = self._persist_plan(session, draft)
@@ -151,16 +130,15 @@ class AgentService:
                 phase="executing",
                 stop_reason=None,
                 memory=memory,
-                ledger=ledger,
             )
             checkpoint_sequence = self._checkpoint(
-                session, checkpoint_sequence, memory, ledger
+                session, checkpoint_sequence, memory
             )
             seen_calls: dict[str, int] = {}
             index = 0
             stop_reason = "plan completed"
             while index < len(steps):
-                self._check_wall_time(started)
+
                 step = steps[index]
                 if step.status in {
                     PlanStepStatus.COMPLETED,
@@ -189,8 +167,6 @@ class AgentService:
                     step=step,
                     execution=execution,
                     memory=memory,
-                    policy=policy,
-                    ledger=ledger,
                     started=started,
                     remaining_steps=max(0, self.limits.max_steps - len(steps)),
                 )
@@ -252,7 +228,7 @@ class AgentService:
                     break
 
                 checkpoint_sequence = self._checkpoint(
-                    session, checkpoint_sequence, memory, ledger
+                    session, checkpoint_sequence, memory
                 )
                 session = self._update_session(
                     session,
@@ -271,7 +247,7 @@ class AgentService:
                         "phase": "completed",
                         "stop_reason": stop_reason,
                         "memory": memory.model_dump(mode="json"),
-                        "usage": self._ledger_data(ledger),
+                        "usage": {"input_tokens": 0, "output_tokens": 0},
                     },
                     "updated_at": utc_now(),
                 }
@@ -288,7 +264,7 @@ class AgentService:
                         "phase": "paused",
                         "stop_reason": "interrupted by user",
                         "memory": memory.model_dump(mode="json"),
-                        "usage": self._ledger_data(ledger),
+                        "usage": {"input_tokens": 0, "output_tokens": 0},
                     },
                     "updated_at": utc_now(),
                 }
@@ -305,7 +281,7 @@ class AgentService:
                         "phase": "paused",
                         "stop_reason": str(exc),
                         "memory": memory.model_dump(mode="json"),
-                        "usage": self._ledger_data(ledger),
+                        "usage": {"input_tokens": 0, "output_tokens": 0},
                     },
                     "updated_at": utc_now(),
                 }
@@ -322,7 +298,7 @@ class AgentService:
                         "phase": "failed",
                         "stop_reason": str(exc),
                         "memory": memory.model_dump(mode="json"),
-                        "usage": self._ledger_data(ledger),
+                        "usage": {"input_tokens": 0, "output_tokens": 0},
                     },
                     "updated_at": utc_now(),
                 }
@@ -337,12 +313,11 @@ class AgentService:
         project: Project,
         session: AnalysisSession,
         goal: str,
-        policy: ProjectModelPolicy,
-        ledger: _Ledger,
+        
         started: float,
     ) -> PlanDraft:
         request = self._planning_request(project, goal)
-        response = self._call_model(project, session, request, policy, ledger, started)
+        response = self._call_model(project, session, request, started)
         try:
             draft = PlanDraft.model_validate(response.structured)
             self._validate_plan(draft, goal=goal)
@@ -355,7 +330,7 @@ class AgentService:
                 validation_error=str(first_error),
             )
             repair_request = ModelRequest(
-                task_type=TaskType.PLANNING,
+                
                 messages=(
                     ModelMessage(
                         role=MessageRole.SYSTEM,
@@ -381,8 +356,7 @@ class AgentService:
                 output_schema_name="reverserx_plan",
                 max_output_tokens=self.limits.model_output_tokens_per_call,
             )
-            repaired = self._call_model(
-                project, session, repair_request, policy, ledger, started
+            repaired = self._call_model(project, session, repair_request, started
             )
             try:
                 draft = PlanDraft.model_validate(repaired.structured)
@@ -437,7 +411,7 @@ class AgentService:
 
     def _planning_request(self, project: Project, goal: str) -> ModelRequest:
         return ModelRequest(
-            task_type=TaskType.PLANNING,
+            
             messages=(
                 ModelMessage(
                     role=MessageRole.SYSTEM,
@@ -699,8 +673,7 @@ class AgentService:
         step: PlanStep,
         execution: ToolRun,
         memory: WorkingMemory,
-        policy: ProjectModelPolicy,
-        ledger: _Ledger,
+        
         started: float,
         remaining_steps: int,
     ) -> ReviewerDecision:
@@ -714,7 +687,7 @@ class AgentService:
             remaining_steps=remaining_steps,
         )
         request = ModelRequest(
-            task_type=TaskType.REVIEW,
+            
             messages=(
                 ModelMessage(
                     role=MessageRole.SYSTEM,
@@ -729,7 +702,7 @@ class AgentService:
             output_schema_name="reverserx_review",
             max_output_tokens=self.limits.model_output_tokens_per_call,
         )
-        response = self._call_model(project, session, request, policy, ledger, started)
+        response = self._call_model(project, session, request, started)
         decision = self._validate_review_decision(response, review_context, policy, project, session, ledger, started)
         if decision is not None:
             return decision
@@ -739,10 +712,8 @@ class AgentService:
         self,
         response: ModelResponse,
         review_context: str,
-        policy: ProjectModelPolicy,
         project: Project,
         session: AnalysisSession,
-        ledger: _Ledger,
         started: float,
     ) -> ReviewerDecision | None:
         """Validate and optionally repair a reviewer decision.
@@ -778,15 +749,13 @@ class AgentService:
         review_context: str,
         error: str,
         response: ModelResponse,
-        policy: ProjectModelPolicy,
         project: Project,
         session: AnalysisSession,
-        ledger: _Ledger,
         started: float,
     ) -> ReviewerDecision | None:
         """Attempt one repair of a reviewer decision."""
         repair_request = ModelRequest(
-            task_type=TaskType.REVIEW,
+            
             messages=(
                 ModelMessage(
                     role=MessageRole.SYSTEM,
@@ -868,79 +837,38 @@ class AgentService:
         project: Project,
         session: AnalysisSession,
         request: ModelRequest,
-        policy: ProjectModelPolicy,
-        ledger: _Ledger,
         started: float,
     ) -> ModelResponse:
-        self._check_wall_time(started)
-        capability = self.router.route(request, policy)
-        estimate = self.router.estimate(request, capability)
-        self._check_projected_limits(ledger, estimate)
-        provider = self.providers.get(capability)
-        attempts = 0
         while True:
             try:
-                response = provider.generate(request)
-                break
+                response = self.router.generate(request)
             except ProviderError as exc:
-                if not exc.transient or attempts >= self.limits.max_retries:
+                if not exc.transient:
                     raise
-                attempts += 1
-                self._check_wall_time(started)
-        actual_cost = self._actual_cost(response, capability)
-        ledger.input_tokens += response.usage.input_tokens
-        ledger.output_tokens += response.usage.output_tokens
-        ledger.actual_cost_usd = round(ledger.actual_cost_usd + actual_cost, 8)
-        self.database.record_model_usage(
+                if time.monotonic() - started > 30:
+                    raise AgentLimitError("provider retry time budget exceeded") from exc
+                time.sleep(1)
+                continue
+            break
+        self.database.save_model_usage(
             ModelUsage(
                 project_id=project.id,
                 session_id=session.id,
                 provider=response.provider,
                 model=response.model,
-                task_type=request.task_type.value,
+                task_type="planning",
                 input_tokens=response.usage.input_tokens,
                 output_tokens=response.usage.output_tokens,
-                input_image_count=request.image_count,
-                estimated_cost_usd=estimate.estimated_cost_usd,
-                actual_cost_usd=actual_cost,
-                request_id=response.request_id,
+                estimated_cost_usd=0.0,
+                actual_cost_usd=0.0,
             )
         )
-        if ledger.input_tokens > self.limits.max_input_tokens:
-            raise AgentLimitError("input-token limit reached")
-        if ledger.output_tokens > self.limits.max_output_tokens:
-            raise AgentLimitError("output-token limit reached")
-        if ledger.actual_cost_usd > self.limits.max_cost_usd:
-            raise AgentLimitError("cost limit reached")
         return response
 
-    def _check_projected_limits(self, ledger: _Ledger, estimate: CostEstimate) -> None:
-        if ledger.input_tokens + estimate.input_tokens > self.limits.max_input_tokens:
-            raise AgentLimitError("input-token limit would be exceeded")
-        if (
-            ledger.output_tokens + estimate.output_tokens
-            > self.limits.max_output_tokens
-        ):
-            raise AgentLimitError("output-token limit would be exceeded")
-        if (
-            ledger.actual_cost_usd + estimate.estimated_cost_usd
-            > self.limits.max_cost_usd
-        ):
-            raise AgentLimitError("cost limit would be exceeded")
 
-    @staticmethod
-    def _actual_cost(response: ModelResponse, capability: ModelCapability) -> float:
-        cost = (
-            response.usage.input_tokens * capability.input_cost_per_million
-            + response.usage.output_tokens * capability.output_cost_per_million
-            + response.usage.image_tokens * capability.image_cost_per_million
-        ) / 1_000_000
-        return round(cost, 8)
-
-    def _check_wall_time(self, started: float) -> None:
-        if time.monotonic() - started > self.limits.max_wall_time_seconds:
-            raise AgentLimitError("wall-time limit reached")
-
+    
+    
+    
     def _require_retry_available(self, step: PlanStep) -> None:
         if step.attempts > self.limits.max_retries:
             raise AgentLimitError(f"retry limit reached for plan step {step.sequence}")
@@ -968,7 +896,7 @@ class AgentService:
                 state={
                     "session_status": session.status.value,
                     "memory": memory.model_dump(mode="json"),
-                    "usage": self._ledger_data(ledger),
+                    "usage": {"input_tokens": 0, "output_tokens": 0},
                     "steps": [
                         step.model_dump(mode="json")
                         for step in self.database.list_plan_steps(session.id)
@@ -994,7 +922,7 @@ class AgentService:
                     "phase": phase,
                     "stop_reason": stop_reason,
                     "memory": memory.model_dump(mode="json"),
-                    "usage": self._ledger_data(ledger),
+                    "usage": {"input_tokens": 0, "output_tokens": 0},
                 },
                 "updated_at": utc_now(),
             }
@@ -1002,18 +930,11 @@ class AgentService:
         return self.database.update_session(updated)
 
     @staticmethod
-    def _ledger_data(ledger: _Ledger) -> dict[str, int | float]:
-        return {
-            "input_tokens": ledger.input_tokens,
-            "output_tokens": ledger.output_tokens,
-            "actual_cost_usd": ledger.actual_cost_usd,
-        }
-
+    
     def _result(
         self,
         session: AnalysisSession,
         memory: WorkingMemory,
-        ledger: _Ledger,
         stop_reason: str,
     ) -> AgentRunResult:
         finding_by_id = {
@@ -1029,9 +950,9 @@ class AgentService:
                 if finding_id in finding_by_id
             ),
             memory=memory,
-            input_tokens=ledger.input_tokens,
-            output_tokens=ledger.output_tokens,
-            actual_cost_usd=ledger.actual_cost_usd,
+            input_tokens=0,
+            output_tokens=0,
+            actual_cost_usd=0.0,
             stop_reason=stop_reason,
         )
 

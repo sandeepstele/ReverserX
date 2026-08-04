@@ -141,7 +141,7 @@ def test_agent_estimate_and_confirmation_do_not_call_a_model(tmp_path: Path) -> 
     )
 
     assert estimated.exit_code == 0, estimated.output
-    assert json.loads(estimated.output)["provider"] == "ollama"
+    assert json.loads(estimated.output)["provider"] == "deepseek"
     assert unconfirmed.exit_code == 2
     database = Database(Settings(data_dir=tmp_path).database_path)
     project = database.get_project("demo")

@@ -13,7 +13,7 @@ def test_sources_use_expected_precedence(tmp_path: Path) -> None:
         config,
         environ={
             "REVERSERX_LOG_LEVEL": "DEBUG",
-            "ANTHROPIC_API_KEY": "highly-sensitive",
+            "DEEPSEEK_API_KEY": "highly-sensitive",
         },
         overrides={"data_dir": tmp_path / "runtime"},
     )
@@ -21,9 +21,9 @@ def test_sources_use_expected_precedence(tmp_path: Path) -> None:
     assert settings.log_level == "DEBUG"
     assert settings.max_agent_steps == 10
     assert settings.data_dir == tmp_path / "runtime"
-    assert settings.anthropic_api_key is not None
-    assert settings.anthropic_api_key.get_secret_value() == "highly-sensitive"
-    assert settings.redacted()["anthropic_api_key"] == "***"
+    assert settings.deepseek_api_key is not None
+    assert settings.deepseek_api_key.get_secret_value() == "highly-sensitive"
+    assert settings.redacted()["deepseek_api_key"] == "***"
     assert "highly-sensitive" not in str(settings.redacted())
 
 

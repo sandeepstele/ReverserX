@@ -1,58 +1,35 @@
-"""Model providers, capability routing, and multimodal contracts."""
+"""DeepSeek provider and message contracts."""
 
-from reverserx.ai.classifier import classify_task
-from reverserx.ai.factory import build_provider_registry
+from reverserx.ai.factory import build_provider
 from reverserx.ai.models import (
-    ArtifactReferencePart,
     CodePart,
-    CostEstimate,
-    ImagePart,
     MessageRole,
-    Modality,
-    ModelCapability,
     ModelMessage,
     ModelRequest,
     ModelResponse,
-    PrivacyLocation,
-    ProjectModelPolicy,
-    TaskType,
     TextPart,
     TokenUsage,
 )
 from reverserx.ai.providers import (
+    DeepSeekProvider,
     ModelProvider,
-    OllamaProvider,
-    OpenAIResponsesProvider,
     ProviderError,
-    ProviderRegistry,
     RecordedProvider,
 )
-from reverserx.ai.router import ModelRouter, RoutingError
+from reverserx.ai.router import ModelRouter
 
 __all__ = [
-    "ArtifactReferencePart",
-    "build_provider_registry",
-    "classify_task",
+    "build_provider",
     "CodePart",
-    "CostEstimate",
-    "ImagePart",
+    "DeepSeekProvider",
     "MessageRole",
-    "Modality",
-    "ModelCapability",
     "ModelMessage",
     "ModelProvider",
     "ModelRequest",
     "ModelResponse",
     "ModelRouter",
-    "OllamaProvider",
-    "OpenAIResponsesProvider",
-    "PrivacyLocation",
-    "ProjectModelPolicy",
     "ProviderError",
-    "ProviderRegistry",
     "RecordedProvider",
-    "RoutingError",
-    "TaskType",
     "TextPart",
     "TokenUsage",
 ]
