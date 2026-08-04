@@ -1,5 +1,6 @@
 """Dynamic Android analysis tools — ADB, Frida, proxy, and interaction."""
 
+from reverserx.tools.dynamic.cert_setup import CertSetupTool
 from reverserx.tools.dynamic.adb import (
     AdbDeviceInfoTool,
     AdbDeviceListTool,
@@ -24,6 +25,7 @@ from reverserx.tools.dynamic.proxy import (
 
 __all__ = [
     "AdbDeviceInfoTool",
+    "CertSetupTool",
     "AdbDeviceListTool",
     "AdbLogcatTool",
     "AdbShellTool",

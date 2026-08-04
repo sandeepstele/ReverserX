@@ -1156,6 +1156,30 @@ def device_info(
     console.print(f"  Root: {info.get('root', False)}")
 
 
+@device_app.command("cert")
+def device_cert(
+    ctx: typer.Context,
+    serial: Annotated[str, typer.Argument(help="Device serial number.")],
+    cert_path: Annotated[str, typer.Option("--cert", help="Path to mitmproxy CA cert (auto-detected).")] = "",
+) -> None:
+    """Install mitmproxy CA certificate on device for HTTPS interception."""
+    run = _run_cli_tool(ctx, "", "cert_setup", {"serial": serial, "cert_path": cert_path})
+    output = run.output_data
+    if _state(ctx).json_output:
+        _print_json(output)
+        return
+    console.print(f"[bold]Cert setup for {serial}[/bold]")
+    console.print(f"Method: {output.get('method', 'unknown')}")
+    console.print(f"Rooted: {output.get('rooted', False)}")
+    console.print(f"Installed: {output.get('cert_installed', False)}")
+    if output.get("cert_hash"):
+        console.print(f"Cert hash: {output['cert_hash']}")
+    for step in output.get("steps", []):
+        console.print(f"  → {step}")
+    for note in output.get("notes", []):
+        console.print(f"  [dim]{note}[/dim]")
+
+
 @device_app.command("shell")
 def device_shell(
     ctx: typer.Context,

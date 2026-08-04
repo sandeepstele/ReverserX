@@ -11,6 +11,7 @@ from reverserx.reporting import AgentReportTool, StaticReportTool
 from reverserx.tools.base import BaseTool, ToolContext, ToolExecution
 from reverserx.tools.dynamic import (
     AdbDeviceInfoTool,
+    CertSetupTool,
     AdbDeviceListTool,
     AdbLogcatTool,
     AdbShellTool,
@@ -104,6 +105,7 @@ def build_default_registry() -> ToolRegistry:
     registry.register(AgentReportTool())
     # Phase 3 — Dynamic analysis tools
     registry.register(AdbDeviceListTool())
+    registry.register(CertSetupTool())
     registry.register(AdbDeviceInfoTool())
     registry.register(AdbShellTool())
     registry.register(AdbLogcatTool())
