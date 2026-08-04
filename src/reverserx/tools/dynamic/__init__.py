@@ -11,6 +11,7 @@ from reverserx.tools.dynamic.frida import (
     FridaInjectTool,
     FridaPsTool,
 )
+from reverserx.tools.dynamic.correlation import CorrelateEvidenceTool
 from reverserx.tools.dynamic.interaction import InteractionWaitTool
 from reverserx.tools.dynamic.proxy import (
     ProxyCaptureImportTool,
@@ -27,6 +28,7 @@ __all__ = [
     "FridaHookListTool",
     "FridaInjectTool",
     "FridaPsTool",
+    "CorrelateEvidenceTool",
     "InteractionWaitTool",
     "ProxyCaptureImportTool",
     "ProxyFlowListTool",

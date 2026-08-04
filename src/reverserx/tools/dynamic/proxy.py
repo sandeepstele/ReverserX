@@ -11,7 +11,9 @@ from reverserx.utils.proxy import (
     ProxyError,
     group_endpoints,
     parse_har,
+    proxy_status,
     start_mitmproxy,
+    stop_mitmproxy,
 )
 
 
@@ -40,22 +42,20 @@ class ProxyStartTool(BaseTool[ProxyPortInput]):
 
     def execute(self, context: ToolContext, arguments: ProxyPortInput) -> ToolExecution:
         try:
-            pid_hint = start_mitmproxy(arguments.port)
+            meta = start_mitmproxy(arguments.port)
         except ProxyError as exc:
             return ToolExecution(
-                output={"status": "error", "error": str(exc)},
+                output={"status": "error", "error": str(exc), "port": arguments.port},
                 notices=(f"Proxy error: {exc}",),
             )
         return ToolExecution(
-            output={
-                "status": "running",
-                "port": arguments.port,
-                "pid_hint": pid_hint,
-                "proxy_url": f"http://127.0.0.1:{arguments.port}",
-            },
+            output=meta,
             notices=(
-                "Ensure the device/emulator proxy is set to this host:port. "
-                "Install the mitmproxy CA certificate on the device for HTTPS.",
+                f"mitmdump running (PID {meta.get('pid')}). "
+                "Set device proxy to 127.0.0.1:{arguments.port} via WiFi settings. "
+                "For emulator: run 'adb reverse tcp:{port} tcp:{port}'. "
+                "For HTTPS: install mitmproxy CA cert on the device (http://mitm.it). "
+                f"Flows saved to: {meta.get('har_path')}",
             ),
         )
 
@@ -67,17 +67,12 @@ class ProxyStopTool(BaseTool[EmptyInput]):
     input_model = EmptyInput
 
     def execute(self, context: ToolContext, arguments: EmptyInput) -> ToolExecution:
-        # In a real implementation, this would signal the background mitmdump
-        # process and collect the output file. For the MVP, return status.
+        result = stop_mitmproxy(8080)
         return ToolExecution(
-            output={
-                "status": "stopped",
-                "flows_captured": 0,
-                "capture_file": None,
-            },
+            output=result,
             notices=(
-                "Proxy capture persistence requires a running mitmdump process. "
-                "Use proxy_capture_import to load a HAR file.",
+                f"mitmdump stopped (port {result.get('port')}). "
+                "Use 'reverserx proxy import <har_file>' to load captured flows.",
             ),
         )
 

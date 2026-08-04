@@ -14,6 +14,7 @@ from reverserx.tools.dynamic import (
     AdbDeviceListTool,
     AdbLogcatTool,
     AdbShellTool,
+    CorrelateEvidenceTool,
     FridaHookListTool,
     FridaInjectTool,
     FridaPsTool,
@@ -112,4 +113,5 @@ def build_default_registry() -> ToolRegistry:
     registry.register(ProxyCaptureImportTool())
     registry.register(ProxyFlowListTool())
     registry.register(InteractionWaitTool())
+    registry.register(CorrelateEvidenceTool())
     return registry

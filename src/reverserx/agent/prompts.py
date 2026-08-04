@@ -22,7 +22,10 @@ evidence-driven plan that addresses the goal. Never invent tool names or argumen
 Dependencies are zero-based indexes of earlier steps.
 
 Dynamic tool policy: You may request ADB, Frida, and proxy actions when authorized
-by the project scope. Dynamic tools use prefixes adb_, frida_, proxy_.
+by the project scope. Dynamic tools use prefixes adb_, frida_, proxy_. After
+collecting runtime evidence, use correlate_evidence to link static findings to
+dynamic observations. Use frida_hook_list to see available instrumentation scripts.
+For SSL pinning, use the pinning_bypass hook with frida_inject.
 
 Goal constraints: Treat existing-state and prohibited-step constraints as mandatory;
 never repeat imports, decompilation, or indexing when already complete. Use only

@@ -1,9 +1,13 @@
-"""Frida session management and script lifecycle utilities."""
+"""Frida session management, script lifecycle, and live execution engine."""
 
 from __future__ import annotations
 
 import hashlib
 import json
+import os
+import signal
+import subprocess
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -14,6 +18,144 @@ from reverserx.utils.subprocess import CommandLaunchError, CommandResult, run_co
 
 class FridaError(RuntimeError):
     """Raised when a Frida operation cannot complete."""
+
+
+# --- Session registry (module-level, survives across tool calls) ---
+_sessions: dict[str, FridaSessionState] = {}
+
+
+def _session_key(project_id: str, package: str) -> str:
+    return f"{project_id}:{package}"
+
+
+# --- Frida Live Execution Engine ---
+
+
+@dataclass
+class FridaRunner:
+    """Spawn frida CLI, collect structured events, manage lifecycle.
+
+    Uses the frida CLI binary (not Python bindings) for simplicity and
+    reliability. Parses JSON lines emitted by send() in hook scripts.
+    """
+
+    serial: str
+    package: str
+    script_path: Path
+    project_id: str = ""
+    frida_path: str = "frida"
+    timeout: float = 120.0
+    spawn: bool = False
+
+    def run(self) -> list[FridaHookEvent]:
+        """Execute frida CLI and return parsed events.
+
+        Uses subprocess.Popen directly (not run_command) to stream output
+        in real-time and support graceful termination.
+        """
+        args = [
+            self.frida_path,
+            "-D", self.serial,
+            "-l", str(self.script_path),
+        ]
+        if self.spawn:
+            args.extend(["-f", self.package, "--no-pause"])
+        else:
+            args.append(self.package)
+
+        events: list[FridaHookEvent] = []
+
+        try:
+            process = subprocess.Popen(
+                args,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                start_new_session=True,
+                text=True,
+            )
+        except (OSError, FileNotFoundError) as exc:
+            raise FridaError(f"cannot start frida: {exc}") from exc
+
+        # Register session
+        key = _session_key(self.project_id, self.package)
+        _sessions[key] = FridaSessionState(
+            serial=self.serial,
+            package=self.package,
+            mode="spawn" if self.spawn else "attach",
+            started_at=time.time(),
+        )
+
+        # Collect output with timeout
+        stdout_lines: list[str] = []
+        stderr_lines: list[str] = []
+
+        def _drain(stream: Any, into: list[str]) -> None:
+            try:
+                for line in stream:
+                    into.append(line.rstrip("\n"))
+            except (OSError, ValueError):
+                pass
+
+        t_stdout = threading.Thread(target=_drain, args=(process.stdout, stdout_lines), daemon=True)
+        t_stderr = threading.Thread(target=_drain, args=(process.stderr, stderr_lines), daemon=True)
+        t_stdout.start()
+        t_stderr.start()
+
+        try:
+            process.wait(timeout=self.timeout)
+        except subprocess.TimeoutExpired:
+            _terminate_gracefully(process)
+            _sessions[key].errors.append("frida timed out")
+
+        t_stdout.join(timeout=2)
+        t_stderr.join(timeout=2)
+
+        # Parse events
+        raw = "\n".join(stdout_lines)
+        events = parse_frida_output(raw)
+
+        # Update session state
+        session = _sessions[key]
+        session.events = events
+        session.raw_output = raw
+        session.errors.extend(stderr_lines)
+
+        return events
+
+    @classmethod
+    def stop_session(cls, project_id: str, package: str) -> bool:
+        """Attempt to clean up a running Frida session."""
+        key = _session_key(project_id, package)
+        session = _sessions.pop(key, None)
+        if session is None:
+            return False
+        # Try to kill the process by package on device
+        try:
+            run_command(
+                ("adb", "-s", session.serial, "shell", "am", "force-stop", package),
+                timeout=5,
+                output_limit=1_000,
+            )
+        except (CommandLaunchError, FridaError):
+            pass
+        return True
+
+
+def _terminate_gracefully(process: subprocess.Popen[Any]) -> None:
+    if process.poll() is not None:
+        return
+    try:
+        if os.name != "nt":
+            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+        else:
+            process.terminate()
+        process.wait(timeout=2)
+    except (ProcessLookupError, subprocess.TimeoutExpired):
+        try:
+            process.kill()
+        except (OSError, ProcessLookupError):
+            pass
 
 
 @dataclass

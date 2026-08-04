@@ -103,18 +103,44 @@ class FridaInjectTool(BaseTool[FridaInjectInput]):
                 notices=(f"Hook load error: {exc}",),
             )
 
-        # In a real Frida session, the script would be injected via frida CLI
-        # or the Frida Python bindings. For the MVP, we return the script
-        # ready for injection and document the command.
-        from reverserx.utils.frida import compute_hook_fingerprint
+        from reverserx.utils.frida import FridaRunner, compute_hook_fingerprint
 
         mode = "spawn" if arguments.spawn else "attach"
-        command = (
-            f"frida -D {arguments.serial} -l {hooks_dir / arguments.hook_name}.js "
-            f"-f {arguments.package}" if arguments.spawn else
-            f"frida -D {arguments.serial} -l {hooks_dir / arguments.hook_name}.js "
-            f"{arguments.package}"
+        # Write to temp file to avoid modifying bundled hooks
+        import tempfile
+        script_path = Path(tempfile.mktemp(suffix=f"-{arguments.hook_name}.js"))
+        script_path.write_text(script, encoding="utf-8")
+
+        # Attempt live execution if frida is available
+        runner = FridaRunner(
+            serial=arguments.serial,
+            package=arguments.package,
+            script_path=script_path,
+            project_id=context.project_id,
+            timeout=arguments.timeout_seconds,
+            spawn=arguments.spawn,
         )
+
+        try:
+            events = runner.run()
+        except FridaError as exc:
+            return ToolExecution(
+                output={
+                    "hook_name": arguments.hook_name,
+                    "package": arguments.package,
+                    "mode": mode,
+                    "fingerprint": compute_hook_fingerprint(script),
+                    "script_preview": script[:5000],
+                    "execution_error": str(exc),
+                    "events": [],
+                    "event_count": 0,
+                },
+                notices=(
+                    f"Frida execution failed: {exc}. "
+                    "Ensure frida-server is running on the device and frida CLI is installed. "
+                    "The script is ready for manual injection.",
+                ),
+            )
 
         return ToolExecution(
             output={
@@ -123,12 +149,25 @@ class FridaInjectTool(BaseTool[FridaInjectInput]):
                 "mode": mode,
                 "fingerprint": compute_hook_fingerprint(script),
                 "script_preview": script[:5000],
-                "suggested_command": command,
-                "device_serial": arguments.serial,
+                "events": [
+                    {
+                        "type": e.hook_type,
+                        "timestamp": e.timestamp,
+                        "class": e.class_name,
+                        "method": e.method_name,
+                        "args": e.args,
+                        "metadata": e.metadata,
+                    }
+                    for e in events
+                ],
+                "event_count": len(events),
             },
             notices=(
-                "Frida injection requires a running frida-server on the device. "
-                "Run this tool inside an agent session for automated injection. "
-                "The returned script_preview is for review before execution.",
+                f"Captured {len(events)} Frida events from {arguments.package}. "
+                "Events are runtime observations — verify against source code.",
+            ) if events else (
+                f"No events captured from {arguments.package} in {arguments.timeout_seconds}s. "
+                "The app may not have triggered the hooked methods during capture. "
+                "Try interacting with the app or increasing timeout.",
             ),
         )

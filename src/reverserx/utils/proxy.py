@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import signal
+import subprocess as _subprocess
+import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -148,17 +152,21 @@ def parse_har(har_path: Path) -> list[CapturedFlow]:
     return flows
 
 
+# --- Background mitmdump process registry ---
+_proxy_processes: dict[str, _subprocess.Popen[Any]] = {}
+
+
 def start_mitmproxy(
     port: int = 8080,
     *,
     output_dir: Path | None = None,
     mitmproxy_path: str = "mitmdump",
     timeout: float = 15,
-) -> int:
-    """Start mitmdump and return the PID (requires subprocess management).
+) -> dict[str, Any]:
+    """Start mitmdump as a background process for live traffic capture.
 
-    Note: This starts mitmdump in the background. The caller is responsible
-    for lifecycle management. Returns 0 if the process couldn't be verified.
+    Returns process metadata including PID, port, and HAR output path.
+    Uses subprocess.Popen directly for background execution.
     """
     # Probe that mitmdump is available
     try:
@@ -171,4 +179,82 @@ def start_mitmproxy(
         raise ProxyError(str(exc)) from exc
     if result.returncode != 0:
         raise ProxyError(f"mitmdump not available: {result.stderr.strip()}")
-    return 1  # PID placeholder — actual background process management via tool layer
+
+    capture_dir = output_dir or Path(tempfile.gettempdir()) / "reverserx-captures"
+    capture_dir.mkdir(parents=True, exist_ok=True)
+    har_path = capture_dir / f"capture-{int(time.time())}.har"
+
+    args: list[str] = [
+        mitmproxy_path,
+        "--listen-port", str(port),
+        "--set", f"hardump={har_path}",
+        "--quiet",
+    ]
+
+    try:
+        process = _subprocess.Popen(
+            args,
+            stdin=_subprocess.DEVNULL,
+            stdout=_subprocess.PIPE,
+            stderr=_subprocess.PIPE,
+            start_new_session=True,
+        )
+    except (OSError, FileNotFoundError) as exc:
+        raise ProxyError(f"cannot start mitmdump: {exc}") from exc
+
+    key = str(port)
+    _proxy_processes[key] = process
+
+    # Brief wait to confirm startup
+    time.sleep(0.5)
+    if process.poll() is not None:
+        stderr = ""
+        try:
+            stderr = (process.stderr.read() if process.stderr else b"").decode(errors="replace")
+        except Exception:
+            pass
+        raise ProxyError(f"mitmdump exited immediately (port {port} in use?): {stderr[:500]}")
+
+    return {
+        "pid": process.pid or 0,
+        "port": port,
+        "har_path": str(har_path),
+        "status": "running",
+        "proxy_url": f"http://127.0.0.1:{port}",
+    }
+
+
+def stop_mitmproxy(port: int = 8080, *, timeout: float = 10) -> dict[str, Any]:
+    """Stop a running mitmdump process and collect the HAR output."""
+    key = str(port)
+    process = _proxy_processes.pop(key, None)
+    if process is None:
+        return {"status": "not_running", "port": port, "flows": 0}
+
+    # Graceful termination
+    try:
+        if os.name != "nt" and process.pid:
+            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+        else:
+            process.terminate()
+        process.wait(timeout=timeout)
+    except (ProcessLookupError, _subprocess.TimeoutExpired):
+        try:
+            process.kill()
+            process.wait(timeout=2)
+        except (OSError, ProcessLookupError):
+            pass
+
+    return {"status": "stopped", "port": port, "pid": process.pid}
+
+
+def proxy_status(port: int = 8080) -> dict[str, Any]:
+    """Check if mitmdump is running on the given port."""
+    key = str(port)
+    process = _proxy_processes.get(key)
+    if process is None:
+        return {"status": "not_running", "port": port}
+    if process.poll() is not None:
+        del _proxy_processes[key]
+        return {"status": "exited", "port": port, "returncode": process.returncode}
+    return {"status": "running", "port": port, "pid": process.pid}
