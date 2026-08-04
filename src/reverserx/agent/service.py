@@ -581,11 +581,10 @@ class AgentService:
                         f"package '{package}' not in project scope packages"
                     )
 
-        if tool_name.startswith("proxy_"):
-            if not scope.get("allow_proxy", False):
-                raise PlanValidationError(
-                    f"proxy tool '{tool_name}' requires allow_proxy in project scope"
-                )
+        if tool_name.startswith("proxy_") and not scope.get("allow_proxy", False):
+            raise PlanValidationError(
+                f"proxy tool '{tool_name}' requires allow_proxy in project scope"
+            )
 
     def _execute_step(
         self,

@@ -12,7 +12,6 @@ from reverserx.utils.frida import (
     frida_ps,
     frida_version,
     load_hook_script,
-    parse_frida_output,
 )
 
 

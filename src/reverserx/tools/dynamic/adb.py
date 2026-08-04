@@ -10,7 +10,6 @@ from reverserx.utils.adb import (
     device_info,
     list_devices,
     logcat,
-    run_adb,
     shell,
 )
 

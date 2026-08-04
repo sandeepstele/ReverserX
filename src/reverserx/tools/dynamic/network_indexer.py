@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
-import json
-import time
-from pathlib import Path
 from typing import Any
 
-from reverserx.utils.proxy import CapturedFlow, redact_secrets, normalize_url
+from reverserx.utils.proxy import CapturedFlow, normalize_url
 
 
 def flow_to_chunks(
@@ -34,7 +32,7 @@ def flow_to_chunks(
 
     # Chunk 1: Request summary
     req_text = f"[NETWORK FLOW] {flow.method} {flow.url}\nStatus: {flow.status}\nDuration: {flow.duration_ms}ms\n"
-    req_text += f"Request Headers:\n"
+    req_text += "Request Headers:\n"
     for name, value in flow.request_headers.items():
         req_text += f"  {name}: {value}\n"
     if flow.request_body_hash:
@@ -43,7 +41,7 @@ def flow_to_chunks(
 
     # Chunk 2: Response summary
     resp_text = f"[NETWORK RESPONSE] {flow.method} {flow.url}\nStatus: {flow.status}\n"
-    resp_text += f"Response Headers:\n"
+    resp_text += "Response Headers:\n"
     for name, value in flow.response_headers.items():
         resp_text += f"  {name}: {value}\n"
     if flow.response_body_hash:
@@ -79,7 +77,7 @@ def index_flows_to_chroma(
     can search both source code and network traffic in one query.
     """
     try:
-        import chromadb  # type: ignore[import-untyped]
+        import chromadb
     except ImportError:
         return {"error": "chromadb not installed", "indexed": 0}
 
@@ -116,14 +114,12 @@ def index_flows_to_chroma(
         except Exception:
             # Fallback: add one by one
             for j in range(len(batch_ids)):
-                try:
+                with contextlib.suppress(Exception):
                     collection.upsert(
                         ids=[batch_ids[j]],
                         documents=[batch_texts[j]],
                         metadatas=[batch_metas[j]],
                     )
-                except Exception:
-                    pass
 
     return {
         "indexed": len(docs),
@@ -140,7 +136,7 @@ def search_flows(
 ) -> list[dict[str, Any]]:
     """Search indexed network flows by natural language query."""
     try:
-        import chromadb  # type: ignore[import-untyped]
+        import chromadb
     except ImportError:
         return []
 
@@ -159,15 +155,23 @@ def search_flows(
         return []
 
     hits: list[dict[str, Any]] = []
-    if results and results.get("documents") and results["documents"][0]:
-        for i, doc in enumerate(results["documents"][0]):
-            meta = results["metadatas"][0][i] if results.get("metadatas") else {}
-            dist = results["distances"][0][i] if results.get("distances") else 0
-            hits.append({
-                "text": str(doc)[:2000],
-                "metadata": meta,
-                "score": float(dist),
-            })
+    if results:
+        docs = results.get("documents")
+        metas = results.get("metadatas")
+        dists = results.get("distances")
+        if docs and isinstance(docs, list) and docs[0] and isinstance(docs[0], list):
+            for i, doc in enumerate(docs[0]):
+                meta: Any = {}
+                if metas and isinstance(metas, list) and metas[0] and isinstance(metas[0], list):
+                    meta = metas[0][i] if i < len(metas[0]) else {}
+                dist: float = 0.0
+                if dists and isinstance(dists, list) and dists[0] and isinstance(dists[0], list):
+                    dist = float(dists[0][i]) if i < len(dists[0]) else 0.0
+                hits.append({
+                    "text": str(doc)[:2000],
+                    "metadata": meta,
+                    "score": dist,
+                })
     return hits
 
 

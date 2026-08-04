@@ -854,7 +854,7 @@ class Database:
                 """,
                 (
                     record.id,
-                    record.schema_version,
+                    "1.0",
                     record.project_id,
                     record.session_id,
                     record.source_evidence_id,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -13,7 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from reverserx.utils.subprocess import CommandLaunchError, CommandResult, run_command
+from reverserx.utils.subprocess import CommandLaunchError, run_command
 
 
 class FridaError(RuntimeError):
@@ -131,14 +132,12 @@ class FridaRunner:
         if session is None:
             return False
         # Try to kill the process by package on device
-        try:
+        with contextlib.suppress(CommandLaunchError, FridaError):
             run_command(
                 ("adb", "-s", session.serial, "shell", "am", "force-stop", package),
                 timeout=5,
                 output_limit=1_000,
             )
-        except (CommandLaunchError, FridaError):
-            pass
         return True
 
 
@@ -152,10 +151,8 @@ def _terminate_gracefully(process: subprocess.Popen[Any]) -> None:
             process.terminate()
         process.wait(timeout=2)
     except (ProcessLookupError, subprocess.TimeoutExpired):
-        try:
+        with contextlib.suppress(OSError, ProcessLookupError):
             process.kill()
-        except (OSError, ProcessLookupError):
-            pass
 
 
 @dataclass

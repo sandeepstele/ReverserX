@@ -10,6 +10,7 @@ ChromaDB.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -202,10 +203,10 @@ class ReverserXProxyServer:
             )
             if result.returncode != 0:
                 raise ProxyServerError(f"mitmdump not available: {result.stderr.strip()}")
-        except FileNotFoundError:
-            raise ProxyServerError("mitmdump not found. Install: pip install mitmproxy")
-        except subprocess.TimeoutExpired:
-            raise ProxyServerError("mitmdump --version timed out")
+        except FileNotFoundError as exc:
+            raise ProxyServerError("mitmdump not found. Install: pip install mitmproxy") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise ProxyServerError("mitmdump --version timed out") from exc
 
         # Write the addon script to a temp file
         with tempfile.NamedTemporaryFile(
@@ -248,10 +249,8 @@ class ReverserXProxyServer:
         time.sleep(1)
         if self._process.poll() is not None:
             stderr = ""
-            try:
+            with contextlib.suppress(Exception):
                 stderr = self._process.stderr.read() if self._process.stderr else ""
-            except Exception:
-                pass
             self._running = False
             raise ProxyServerError(f"mitmdump exited immediately: {stderr[:500]}")
 
@@ -285,10 +284,8 @@ class ReverserXProxyServer:
                     with self._lock:
                         self.flows.append(live)
                     if self._external_callback:
-                        try:
+                        with contextlib.suppress(Exception):
                             self._external_callback(live)
-                        except Exception:
-                            pass
                     if self.auto_index and self.project_id and self.data_dir:
                         self._auto_index_flow(live)
                 except (json.JSONDecodeError, KeyError):
@@ -328,10 +325,8 @@ class ReverserXProxyServer:
 
         # Clean up temp addon script
         if self._script_path and self._script_path.exists():
-            try:
+            with contextlib.suppress(OSError):
                 self._script_path.unlink()
-            except OSError:
-                pass
 
         with self._lock:
             flows = list(self.flows)

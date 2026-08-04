@@ -10,14 +10,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from reverserx.tools.base import BaseTool, EmptyInput, ToolContext, ToolExecution
 from reverserx.utils.proxy import (
-    CapturedFlow,
     ProxyError,
     group_endpoints,
-    normalize_url,
     parse_har,
-    redact_secrets,
 )
-from reverserx.utils.proxy_server import ReverserXProxyServer, ProxyServerError
+from reverserx.utils.proxy_server import ProxyServerError, ReverserXProxyServer
 
 # Module-level proxy server — survives across tool calls
 _active_proxy: ReverserXProxyServer | None = None
@@ -256,7 +253,9 @@ class LiveCaptureTool(BaseTool[LiveCaptureInput]):
         index_result: dict[str, Any] = {"indexed": 0}
         if arguments.index_flows:
             try:
-                from reverserx.tools.dynamic.network_indexer import index_flows_to_chroma
+                from reverserx.tools.dynamic.network_indexer import (
+                    index_flows_to_chroma,
+                )
                 cf_list = [f.to_captured_flow() for f in proxy.flows]
                 collection = f"network_flows_{context.project_id}"
                 persist = str(context.data_dir / "chroma")

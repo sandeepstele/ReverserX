@@ -37,11 +37,11 @@ class CertSetupTool(BaseTool[CertSetupInput]):
     input_model = CertSetupInput
 
     def execute(self, context: ToolContext, arguments: CertSetupInput) -> ToolExecution:
-        from reverserx.utils.adb import run_adb, AdbError
-        from pathlib import Path as _Path
         import hashlib as _hashlib
 
-        result: dict = {
+        from reverserx.utils.adb import AdbError, run_adb
+
+        result: dict[str, object] = {
             "serial": arguments.serial,
             "method": "unknown",
             "cert_installed": False,

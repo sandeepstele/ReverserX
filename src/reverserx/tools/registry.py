@@ -11,10 +11,10 @@ from reverserx.reporting import AgentReportTool, StaticReportTool
 from reverserx.tools.base import BaseTool, ToolContext, ToolExecution
 from reverserx.tools.dynamic import (
     AdbDeviceInfoTool,
-    CertSetupTool,
     AdbDeviceListTool,
     AdbLogcatTool,
     AdbShellTool,
+    CertSetupTool,
     CorrelateEvidenceTool,
     FridaHookListTool,
     FridaInjectTool,

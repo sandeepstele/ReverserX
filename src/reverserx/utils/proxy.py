@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -14,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from reverserx.utils.subprocess import CommandLaunchError, CommandResult, run_command
+from reverserx.utils.subprocess import CommandLaunchError, run_command
 
 
 class ProxyError(RuntimeError):
@@ -209,10 +210,8 @@ def start_mitmproxy(
     time.sleep(0.5)
     if process.poll() is not None:
         stderr = ""
-        try:
+        with contextlib.suppress(Exception):
             stderr = (process.stderr.read() if process.stderr else b"").decode(errors="replace")
-        except Exception:
-            pass
         raise ProxyError(f"mitmdump exited immediately (port {port} in use?): {stderr[:500]}")
 
     return {

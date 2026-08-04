@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import textwrap
-
 
 def generate_crypto_hook(
     class_name: str,
