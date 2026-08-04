@@ -70,7 +70,7 @@ def test_cli_initializes_and_manages_project(tmp_path: Path) -> None:
     projects = json.loads(listed.output)
     assert projects[0]["slug"] == "demo-app"
     assert projects[0]["scope"]["packages"] == ["com.example.demo"]
-    assert projects[0]["scope"]["model_policy"] == {"local_only": False}
+    assert "packages" in projects[0]["scope"]
 
 
 def test_cli_imports_artifact_and_records_tool_run(tmp_path: Path) -> None:
@@ -124,7 +124,6 @@ def test_agent_estimate_and_confirmation_do_not_call_a_model(tmp_path: Path) -> 
             "estimate",
             "demo",
             "Locate encryption",
-            "--local-only",
         ],
     )
     unconfirmed = runner.invoke(
@@ -136,7 +135,6 @@ def test_agent_estimate_and_confirmation_do_not_call_a_model(tmp_path: Path) -> 
             "run",
             "demo",
             "Locate encryption",
-            "--local-only",
         ],
     )
 

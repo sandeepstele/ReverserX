@@ -235,7 +235,6 @@ class AgentService:
                     phase="executing",
                     stop_reason=None,
                     memory=memory,
-                    ledger=ledger,
                 )
                 index += 1
 
@@ -253,8 +252,8 @@ class AgentService:
                 }
             )
             self.database.update_session(session)
-            self._checkpoint(session, checkpoint_sequence, memory, ledger)
-            return self._result(session, memory, ledger, stop_reason)
+            self._checkpoint(session, checkpoint_sequence, memory)
+            return self._result(session, memory, stop_reason)
         except KeyboardInterrupt:
             interrupted = session.model_copy(
                 update={
@@ -270,7 +269,7 @@ class AgentService:
                 }
             )
             self.database.update_session(interrupted)
-            self._checkpoint(interrupted, checkpoint_sequence, memory, ledger)
+            self._checkpoint(interrupted, checkpoint_sequence, memory)
             raise
         except AgentLimitError as exc:
             session = session.model_copy(
@@ -287,8 +286,8 @@ class AgentService:
                 }
             )
             self.database.update_session(session)
-            self._checkpoint(session, checkpoint_sequence, memory, ledger)
-            return self._result(session, memory, ledger, str(exc))
+            self._checkpoint(session, checkpoint_sequence, memory)
+            return self._result(session, memory, str(exc))
         except Exception as exc:
             failed = session.model_copy(
                 update={
@@ -304,7 +303,7 @@ class AgentService:
                 }
             )
             self.database.update_session(failed)
-            self._checkpoint(failed, checkpoint_sequence, memory, ledger)
+            self._checkpoint(failed, checkpoint_sequence, memory)
             raise
 
     def _create_plan(
@@ -703,7 +702,7 @@ class AgentService:
             max_output_tokens=self.limits.model_output_tokens_per_call,
         )
         response = self._call_model(project, session, request, started)
-        decision = self._validate_review_decision(response, review_context, policy, project, session, ledger, started)
+        decision = self._validate_review_decision(response, review_context, project, session, started)
         if decision is not None:
             return decision
         raise AgentError("reviewer decision remained invalid after one repair")
@@ -724,7 +723,7 @@ class AgentService:
             decision = ReviewerDecision.model_validate(response.structured)
         except ValidationError as first_error:
             return self._repair_review_decision(
-                review_context, str(first_error), response, policy, project, session, ledger, started
+                review_context, str(first_error), response, project, session, started
             )
         # Post-validate action-specific requirements that pydantic can't enforce
         action_error: str | None = None
@@ -740,7 +739,7 @@ class AgentService:
             )
         if action_error is not None:
             return self._repair_review_decision(
-                review_context, action_error, response, policy, project, session, ledger, started
+                review_context, action_error, response, project, session, started
             )
         return decision
 
@@ -780,7 +779,7 @@ class AgentService:
             max_output_tokens=self.limits.model_output_tokens_per_call,
         )
         repaired = self._call_model(
-            project, session, repair_request, policy, ledger, started
+            project, session, repair_request, started
         )
         try:
             decision = ReviewerDecision.model_validate(repaired.structured)
@@ -850,7 +849,7 @@ class AgentService:
                 time.sleep(1)
                 continue
             break
-        self.database.save_model_usage(
+        self.database.record_model_usage(
             ModelUsage(
                 project_id=project.id,
                 session_id=session.id,
@@ -886,7 +885,7 @@ class AgentService:
         session: AnalysisSession,
         sequence: int,
         memory: WorkingMemory,
-        ledger: _Ledger,
+
     ) -> int:
         next_sequence = sequence + 1
         self.database.save_checkpoint(
@@ -913,7 +912,7 @@ class AgentService:
         phase: str,
         stop_reason: str | None,
         memory: WorkingMemory,
-        ledger: _Ledger,
+
     ) -> AnalysisSession:
         updated = session.model_copy(
             update={
