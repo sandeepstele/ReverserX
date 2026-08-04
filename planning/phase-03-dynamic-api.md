@@ -47,30 +47,35 @@ evidence.
 
 ## Implemented baseline
 
-- 12 dynamic tools registered: `adb_device_list`, `adb_device_info`, `adb_shell`,
-  `adb_logcat`, `frida_ps`, `frida_hook_list`, `frida_inject`, `proxy_start`,
-  `proxy_stop`, `proxy_capture_import`, `proxy_flow_list`, `interaction_wait`.
-- 4 bundled versioned Frida hook scripts: `crypto.js` (Cipher, SecretKeySpec, Mac),
-  `http.js` (OkHttp, HttpURLConnection), `pinning.js` (SSL/TLS, CertificatePinner),
-  `intents.js` (Intent construction, startActivity, sendBroadcast).
-- `AdbClient` wrapper over `run_command()` with `AdbError` domain errors.
-- `FridaSession` utilities: version probe, process listing, hook script loading
-  with template substitution, structured JSON event parsing from Frida output.
-- HAR import and normalization: URL path variable collapsing (`{id}`, `{uuid}`,
-  `{token}`), endpoint grouping, secret header redaction (Authorization, Cookie,
-  Set-Cookie → sha256 hashes).
+- **28 tools** registered (16 dynamic): `adb_device_list`, `adb_device_info`,
+  `adb_shell`, `adb_logcat`, `frida_ps`, `frida_hook_list`, `frida_inject`,
+  `proxy_start`, `proxy_stop`, `proxy_live_capture`, `proxy_capture_import`,
+  `proxy_flow_list`, `network_flow_search`, `correlate_evidence`,
+  `interaction_wait`, `cert_setup`.
+- **6 bundled Frida hooks**: `crypto.js` (Cipher, SecretKeySpec, Mac, IvParameterSpec,
+  PBEKeySpec, MessageDigest, Base64), `http.js` (OkHttp, HttpURLConnection),
+  `pinning.js` (SSL/TLS observation), `pinning_bypass.js` (actual TrustManager override),
+  `trust_all.js` (universal TLS trust bypass — SSLContext, CertificatePinner,
+  HostnameVerifier, NetworkSecurityConfig), `intents.js` (Intent, broadcast).
+- **Real-time proxy server** (`proxy_server.py`): spawns mitmdump with inline Python
+  addon, streams JSON flow events in real-time, captures full request/response bodies
+  (5KB truncation), live auto-indexing into ChromaDB, in-memory flow search.
+- **Hook generator** (`generator.py`): template engine producing valid Frida JS from
+  class/method names for crypto, HTTP, and generic targets with overload resolution.
+- **Network flow indexer** (`network_indexer.py`): chunks HTTP flows with metadata
+  (method, URL, normalized URL, host, status), indexes into ChromaDB alongside source
+  code for unified semantic search.
+- **Cert setup** (`cert_setup.py`): auto-detects mitmproxy CA, detects root status,
+  pushes to system store (rooted) or user store (non-rooted) via ADB.
+- `FridaRunner` live execution engine: spawns `frida` CLI, streams events, manages
+  session lifecycle with graceful termination.
+- `AdbClient` wrapper with `AdbError` domain errors over `run_command()`.
+- HAR import, normalization, secret redaction, endpoint grouping.
 - `CorrelationRecord` model and SQLite persistence (migration v6).
-- Project scope gate: `_check_dynamic_scope()` in agent loop validates
-  `dynamic_enabled`, package allowlists, device allowlists, and `allow_proxy`
-  before executing dynamic tools.
-- Agent prompt updates: planner and reviewer are now dynamic-aware.
-- `WorkingMemory` extended with `active_device`, `active_frida_session`,
-  `active_proxy_port`, `needs_user_interaction`.
-- Evidence kind routing: Frida tools → `RUNTIME_EVENT`, proxy tools →
-  `NETWORK_FLOW`, static/ADB tools → `TOOL_OUTPUT`.
-- `device` and `proxy` CLI command groups with 7 commands.
-- 9 new config fields with env var mappings.
-- All tools handle missing binaries gracefully without crashing.
+- Project scope gate, dynamic-aware agent prompts, `WorkingMemory` dynamic state.
+- Evidence kind routing: Frida→`RUNTIME_EVENT`, proxy→`NETWORK_FLOW`.
+- `device` and `proxy` CLI command groups with 8 commands.
+- 9 config fields with env var mappings. All tools handle missing binaries gracefully.
 
 ## Acceptance record
 
@@ -86,9 +91,13 @@ evidence.
 - [x] Correlation record model and SQLite table link static, runtime, and network
   evidence.
 - [x] 232 repository tests pass with no regressions.
+- [x] 28 tools (16 dynamic), 6 hook scripts, hook generator, cert setup.
+- [x] Real-time proxy server with live body capture verified via curl.
+- [x] Network flow indexer chunks flows for ChromaDB unified search.
+- [x] HAR import + normalization + secret redaction verified.
 - [ ] Live-device acceptance: run ADB tools against a real device/emulator.
 - [ ] Live Frida injection and event capture against the authorized fixture app.
-- [ ] Live mitmproxy capture, HAR import, and endpoint grouping.
+- [ ] Live mitmproxy capture with real app HTTPS traffic.
 - [ ] Full fixture demo: static crypto method → runtime Frida hook → captured API
   field → correlation record → evidence-linked report.
 - [ ] Device disconnect, app crash, and Frida detach recovery testing.

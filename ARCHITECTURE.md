@@ -78,11 +78,27 @@ External tools receive argument vectors with `shell=False`. Standard output and
 error are drained continuously and retained only to configured limits. Timeouts
 and cancellation terminate the managed process group.
 
-## Future layers
+## Phase 3 — Dynamic Analysis (implemented)
 
-Later phases add ADB, Frida, proxy, Ghidra, deeper evidence correlation, polished
-resume, and HTML export. These layers must depend inward on core contracts rather
-than placing provider logic inside storage or deterministic tool adapters.
+ADB, Frida, and mitmproxy tools follow the same BaseTool contract as Phase 1
+tools. Key additions:
+
+- **28 tools** registered, 16 dynamic (adb_, frida_, proxy_, network_flow_search,
+  correlate_evidence, interaction_wait, cert_setup).
+- **6 bundled Frida hooks** in `tools/dynamic/hooks/` — crypto instrumentation,
+  HTTP observation, SSL pinning detection, SSL pinning bypass, intent observation,
+  universal TLS trust bypass (trust_all.js).
+- **Real-time proxy** (`utils/proxy_server.py`): spawns mitmdump with inline Python
+  addon, streams JSON flow events, captures request/response bodies, auto-indexes
+  into ChromaDB.
+- **Network flow indexer**: chunks HTTP flows with metadata, indexes into ChromaDB
+  alongside source code for unified semantic search via `context_query`.
+- **Hook generator**: template-based Frida script generation from class/method names.
+- **Cert setup**: automated mitmproxy CA cert installation via ADB.
+- **Project scope gate**: programmatic enforcement of `dynamic_enabled`, package
+  allowlists, device allowlists, and `allow_proxy` before dynamic tool execution.
+- **Evidence routing**: Frida tools → `RUNTIME_EVENT`, proxy tools → `NETWORK_FLOW`.
+- **Correlation records**: link static, runtime, and network evidence in SQLite.
 
 ## Runtime layout
 
@@ -94,8 +110,15 @@ data-dir/
 ├── reverserx.sqlite3
 ├── reverserx.sqlite3-shm
 ├── reverserx.sqlite3-wal
-└── artifacts/
-    └── <project-id>/<digest-prefix>/<sha256>/blob
+├── artifacts/
+│   └── <project-id>/<digest-prefix>/<sha256>/blob
+├── projects/<project-id>/
+│   ├── jadx/<digest>/sources/...   # Phase 1
+│   ├── captures/                    # Phase 3 — HAR files
+│   └── reports/
+│       ├── static-analysis.md
+│       └── dynamic-analysis.md
+└── chroma/                          # Phase 1/3 — vector index
 ```
 
 Runtime data is intentionally not stored in the source tree by default.

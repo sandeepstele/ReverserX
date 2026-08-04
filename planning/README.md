@@ -39,15 +39,14 @@ native binary analysis remain in scope.
   hard cost/step stops, evidence-linked findings, checkpoints, and Markdown
   agent reports. DeepSeek Chat Completions provider added alongside Ollama
   and OpenAI. A reviewer REFINE/INJECT repair bug was fixed during live testing.
-- **Phase 3 engineering implementation is complete; live-device and
-  owner/product acceptance remain pending.** ADB device management (list,
-  info, shell, logcat), Frida session tools (ps, hook-list, inject with 4
-  bundled hook scripts for crypto, HTTP, pinning, and intents), mitmproxy
-  lifecycle (start, stop, HAR import, flow listing), manual interaction
-  checkpoints, HAR/flow normalization with secret redaction, correlation
-  records, dynamic-enabled project scope gates, and dynamic-aware agent prompts
-  are implemented. 12 new tools registered, 4 bundled Frida hooks shipped.
-  232 tests pass with no regressions.
+- **Phase 3 engineering implementation is complete; live-device
+  acceptance pending.** 28 tools registered (16 dynamic). Real-time mitmproxy
+  with Python addon for live flow streaming and body capture. 6 bundled Frida
+  hooks: crypto, http, pinning, pinning_bypass, intents, trust_all (universal
+  TLS trust bypass). Automated cert installation via ADB. Hook script generator
+  from static findings. Network flow indexer feeding captured traffic into
+  ChromaDB for unified source+traffic search. HAR import, secret redaction,
+  endpoint normalization, correlation records, scope gates. 232 tests pass.
 
 APK signing certificate, signature, and public-key evidence is inventoried and
 fingerprinted, but it is not cryptographically verified. The project must not

@@ -9,8 +9,10 @@ proof of product quality.
 
 - The final implementation baseline has **232 passing repository tests** with 80%
   measured coverage.
-- **24 registered tools** (13 static + 12 dynamic, -1 echo).
-- **4 bundled Frida hook scripts** (crypto, http, pinning, intents).
+- **28 registered tools** (15 static + 16 dynamic, -3 reporting/echo).
+- **6 bundled Frida hook scripts** (crypto, http, pinning, pinning_bypass, intents, trust_all).
+- **Real-time mitmproxy** with Python addon, live body capture, auto ChromaDB indexing.
+- **Hook generator** from static findings, **cert installer** via ADB, **network flow indexer**.
 - Ruff formatting/linting and strict MyPy validation pass.
 - The controlled production-`ContextService` benchmark records hit@1, hit@3,
   hit@5, and MRR of 1.0.
