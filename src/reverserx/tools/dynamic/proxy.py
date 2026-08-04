@@ -1,8 +1,10 @@
-"""mitmproxy lifecycle tools — start, stop, import, and list captured flows."""
+"""mitmproxy lifecycle tools — start, stop, import, live capture, and flow search."""
 
 from __future__ import annotations
 
+import time as _time
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -13,11 +15,13 @@ from reverserx.utils.proxy import (
     group_endpoints,
     normalize_url,
     parse_har,
-    proxy_status,
     redact_secrets,
-    start_mitmproxy,
-    stop_mitmproxy,
 )
+from reverserx.utils.proxy_server import ReverserXProxyServer, ProxyServerError
+
+# Module-level proxy server — survives across tool calls
+_active_proxy: ReverserXProxyServer | None = None
+_active_proxy_lock = __import__("threading").Lock()
 
 
 class ProxyPortInput(BaseModel):
@@ -44,21 +48,43 @@ class ProxyStartTool(BaseTool[ProxyPortInput]):
     input_model = ProxyPortInput
 
     def execute(self, context: ToolContext, arguments: ProxyPortInput) -> ToolExecution:
-        try:
-            meta = start_mitmproxy(arguments.port)
-        except ProxyError as exc:
-            return ToolExecution(
-                output={"status": "error", "error": str(exc), "port": arguments.port},
-                notices=(f"Proxy error: {exc}",),
-            )
+        global _active_proxy
+        with _active_proxy_lock:
+            if _active_proxy is not None and _active_proxy._running:
+                return ToolExecution(
+                    output={"status": "already_running", "port": _active_proxy.port},
+                    notices=("Proxy is already running. Use proxy_stop first.",),
+                )
+
+            try:
+                _active_proxy = ReverserXProxyServer(
+                    port=arguments.port,
+                    project_id=context.project_id,
+                    data_dir=context.data_dir,
+                    capture_bodies=True,
+                    auto_index=True,
+                )
+                _active_proxy.start()
+            except ProxyServerError as exc:
+                _active_proxy = None
+                return ToolExecution(
+                    output={"status": "error", "error": str(exc), "port": arguments.port},
+                    notices=(f"Proxy start failed: {exc}",),
+                )
+
         return ToolExecution(
-            output=meta,
+            output={
+                "status": "running",
+                "port": arguments.port,
+                "flows_captured": 0,
+                "proxy_url": f"http://127.0.0.1:{arguments.port}",
+            },
             notices=(
-                f"mitmdump running (PID {meta.get('pid')}). "
-                "Set device proxy to 127.0.0.1:{arguments.port} via WiFi settings. "
-                "For emulator: run 'adb reverse tcp:{port} tcp:{port}'. "
-                "For HTTPS: install mitmproxy CA cert on the device (http://mitm.it). "
-                f"Flows saved to: {meta.get('har_path')}",
+                "Real-time proxy running with body capture and auto-indexing. "
+                f"Set device proxy to 127.0.0.1:{arguments.port}. "
+                f"For emulator: 'adb reverse tcp:{arguments.port} tcp:{arguments.port}'. "
+                "For HTTPS: install mitmproxy CA cert (http://mitm.it). "
+                "Use 'proxy flows' to see live traffic or 'proxy live' for monitoring.",
             ),
         )
 
@@ -70,12 +96,23 @@ class ProxyStopTool(BaseTool[EmptyInput]):
     input_model = EmptyInput
 
     def execute(self, context: ToolContext, arguments: EmptyInput) -> ToolExecution:
-        result = stop_mitmproxy(8080)
+        global _active_proxy
+        with _active_proxy_lock:
+            if _active_proxy is None:
+                return ToolExecution(
+                    output={"status": "not_running", "flows_captured": 0},
+                    notices=("No proxy is running.",),
+                )
+            result = _active_proxy.stop()
+            _active_proxy = None
+
         return ToolExecution(
             output=result,
             notices=(
-                f"mitmdump stopped (port {result.get('port')}). "
-                "Use 'reverserx proxy import <har_file>' to load captured flows.",
+                f"Proxy stopped. {result['flows_captured']} flows captured "
+                f"across {result['endpoint_count']} endpoints. "
+                f"{result['total_request_bytes'] + result['total_response_bytes']} total bytes. "
+                "Use 'proxy flows' to inspect or 'network_flow_search' to query indexed traffic.",
             ),
         )
 
@@ -122,23 +159,40 @@ class ProxyCaptureImportTool(BaseTool[HarImportInput]):
         )
 
 
-class ProxyFlowListTool(BaseTool[EmptyInput]):
-    name = "proxy_flow_list"
-    description = "List captured API flows with URL, method, status, and timing."
-    version = "1.0.0"
-    input_model = EmptyInput
+class ProxyFlowsInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    limit: int = Field(default=50, ge=1, le=500)
+    include_bodies: bool = False
 
-    def execute(self, context: ToolContext, arguments: EmptyInput) -> ToolExecution:
-        # For MVP: return guidance. Full implementation reads from persisted
-        # network_flows table once proxy capture is integrated.
+
+class ProxyFlowListTool(BaseTool[ProxyFlowsInput]):
+    name = "proxy_flow_list"
+    description = "List captured API flows with URL, method, status, timing, and optional bodies."
+    version = "1.1.0"
+    input_model = ProxyFlowsInput
+
+    def execute(self, context: ToolContext, arguments: ProxyFlowsInput) -> ToolExecution:
+        global _active_proxy
+        with _active_proxy_lock:
+            if _active_proxy is None or not _active_proxy._running:
+                return ToolExecution(
+                    output={"flows": [], "count": 0, "status": "no_proxy_running"},
+                    notices=("No proxy is running. Start one with proxy_start.",),
+                )
+            flows = _active_proxy.list_flows(limit=arguments.limit, include_bodies=arguments.include_bodies)
+            endpoints = _active_proxy.get_endpoints()
+
         return ToolExecution(
             output={
-                "flows": [],
-                "count": 0,
+                "flows": flows,
+                "count": len(flows),
+                "total_captured": len(_active_proxy.flows) if _active_proxy else 0,
+                "endpoints": endpoints[:30],
+                "status": "running",
             },
             notices=(
-                "Use proxy_capture_import to import HAR files first. "
-                "Live flow listing will be available in a future update.",
+                f"Showing {len(flows)} of {len(_active_proxy.flows) if _active_proxy else 0} captured flows. "
+                "Set include_bodies=true for request/response body content.",
             ),
         )
 
@@ -153,119 +207,81 @@ class LiveCaptureInput(BaseModel):
 class LiveCaptureTool(BaseTool[LiveCaptureInput]):
     name = "proxy_live_capture"
     description = (
-        "Start mitmproxy, capture HTTP flows live, index into ChromaDB, "
-        "and display traffic in real-time. Like HTTP Toolkit built into ReverserX."
+        "Real-time HTTP/HTTPS traffic capture using mitmproxy Python API. "
+        "Streams flows live with full body capture, auto-indexes into ChromaDB, "
+        "and displays endpoint patterns. No polling delay."
     )
-    version = "1.0.0"
+    version = "2.0.0"
     input_model = LiveCaptureInput
 
     def execute(self, context: ToolContext, arguments: LiveCaptureInput) -> ToolExecution:
-        import threading
-        import time as _time
+        global _active_proxy
 
-        # 1. Start proxy
-        try:
-            meta = start_mitmproxy(arguments.port)
-        except ProxyError as exc:
-            return ToolExecution(
-                output={"status": "error", "error": str(exc)},
-                notices=(f"Proxy start failed: {exc}",),
-            )
+        with _active_proxy_lock:
+            # Start proxy if not already running
+            if _active_proxy is None or not _active_proxy._running:
+                try:
+                    _active_proxy = ReverserXProxyServer(
+                        port=arguments.port,
+                        project_id=context.project_id,
+                        data_dir=context.data_dir,
+                        capture_bodies=True,
+                        auto_index=arguments.index_flows,
+                    )
+                    _active_proxy.start()
+                except ProxyServerError as exc:
+                    return ToolExecution(
+                        output={"status": "error", "error": str(exc)},
+                        notices=(f"Proxy start failed: {exc}",),
+                    )
+            proxy = _active_proxy
 
-        har_path = Path(meta["har_path"])
-        flows_before: set[str] = set()
-
-        # 2. Wait for capture duration, polling for new flows
+        # Capture for duration
+        start_count = len(proxy.flows)
         deadline = _time.monotonic() + arguments.duration_seconds
-        all_flows: list[dict[str, Any]] = []
-        last_check = 0
 
+        # Report progress periodically
         while _time.monotonic() < deadline:
-            _time.sleep(2)  # Poll every 2 seconds
-            if har_path.exists():
-                mtime = har_path.stat().st_mtime
-                if mtime > last_check:
-                    last_check = mtime
-                    try:
-                        new_flows = parse_har(har_path)
-                        for f in new_flows:
-                            if f.id not in flows_before:
-                                flows_before.add(f.id)
-                                all_flows.append({
-                                    "id": f.id,
-                                    "method": f.method,
-                                    "url": f.url,
-                                    "normalized_url": normalize_url(f.url),
-                                    "status": f.status,
-                                    "duration_ms": f.duration_ms,
-                                    "request_headers": redact_secrets(f.request_headers),
-                                    "response_headers": redact_secrets(f.response_headers),
-                                    "request_body_hash": f.request_body_hash,
-                                    "response_body_hash": f.response_body_hash,
-                                })
-                    except Exception:
-                        pass
+            _time.sleep(5)
+            current = len(proxy.flows)
+            if current > start_count:
+                # Got new flows
+                pass
 
-        # 3. Stop proxy
-        stop_result = stop_mitmproxy(arguments.port)
+        # Collect results
+        flows = proxy.list_flows(limit=500, include_bodies=False)
+        endpoints = proxy.get_endpoints()
 
-        # 4. Index flows into ChromaDB
+        # Index if requested (already done via auto_index, but do final batch)
         index_result: dict[str, Any] = {"indexed": 0}
-        if arguments.index_flows and all_flows:
+        if arguments.index_flows:
             try:
                 from reverserx.tools.dynamic.network_indexer import index_flows_to_chroma
-                from reverserx.utils.proxy import CapturedFlow
-
-                flow_objects = [
-                    CapturedFlow(
-                        id=f["id"],
-                        url=f["url"],
-                        method=f["method"],
-                        status=f["status"],
-                        request_headers=f["request_headers"],
-                        response_headers=f["response_headers"],
-                        request_body_hash=f.get("request_body_hash", ""),
-                        response_body_hash=f.get("response_body_hash", ""),
-                        duration_ms=f.get("duration_ms", 0),
-                        timestamp=f.get("timestamp", _time.time()),
-                    )
-                    for f in all_flows
-                ]
+                cf_list = [f.to_captured_flow() for f in proxy.flows]
                 collection = f"network_flows_{context.project_id}"
                 persist = str(context.data_dir / "chroma")
-                index_result = index_flows_to_chroma(flow_objects, collection, persist)
+                index_result = index_flows_to_chroma(cf_list, collection, persist)
             except Exception as exc:
                 index_result = {"error": str(exc), "indexed": 0}
 
-        # 5. Display results
-        endpoints = group_endpoints(
-            [CapturedFlow(
-                id=f["id"], url=f["url"], method=f["method"], status=f["status"],
-                request_headers=f.get("request_headers", {}),
-                response_headers=f.get("response_headers", {}),
-                duration_ms=f.get("duration_ms", 0),
-            ) for f in all_flows]
-        ) if all_flows else []
-
         return ToolExecution(
             output={
-                "status": "complete",
+                "status": "capturing" if proxy._running else "stopped",
                 "duration": arguments.duration_seconds,
-                "flows_captured": len(all_flows),
+                "flows_captured": len(flows),
+                "total_flows": len(proxy.flows),
                 "indexed_chunks": index_result.get("indexed", 0),
-                "endpoints": [
-                    {"pattern": e.pattern, "method": e.method, "host": e.host, "count": e.flow_count}
-                    for e in endpoints[:30]
-                ],
-                "flows": all_flows[:100],  # First 100 flows in detail
-                "har_path": meta["har_path"],
+                "endpoints": endpoints[:50],
+                "flows": flows[:100],
+                "proxy_port": arguments.port,
             },
             notices=(
-                f"Captured {len(all_flows)} flows across {len(endpoints)} endpoints "
+                f"Real-time capture: {len(flows)} flows, {len(endpoints)} endpoints "
                 f"in {arguments.duration_seconds}s. "
                 f"Indexed {index_result.get('indexed', 0)} chunks into ChromaDB. "
-                f"Use 'reverserx context query testapp \"API request patterns\"' "
-                f"to search captured traffic alongside source code.",
+                f"Proxy still running — use 'proxy flows' to see more, "
+                f"'proxy stop' to end capture. "
+                f"Search traffic: 'reverserx tool run testapp network_flow_search -a {{\"query\":\"auth\"}}'",
             ),
         )
 
@@ -286,23 +302,48 @@ class NetworkFlowSearchTool(BaseTool[NetworkFlowSearchInput]):
     input_model = NetworkFlowSearchInput
 
     def execute(self, context: ToolContext, arguments: NetworkFlowSearchInput) -> ToolExecution:
+        # First try live proxy search (in-memory, instant, includes bodies)
+        global _active_proxy
+        live_hits: list[dict[str, Any]] = []
+        with _active_proxy_lock:
+            if _active_proxy is not None and _active_proxy._running:
+                live_hits = _active_proxy.search_flows(arguments.query, limit=arguments.limit)
+
+        # Also try ChromaDB for indexed historical flows
+        chroma_hits: list[dict[str, Any]] = []
         try:
             from reverserx.tools.dynamic.network_indexer import search_flows
-        except ImportError:
-            return ToolExecution(output={"hits": [], "error": "chromadb not installed"})
+            collection = f"network_flows_{context.project_id}"
+            persist = str(context.data_dir / "chroma")
+            chroma_hits = search_flows(arguments.query, collection, persist, limit=arguments.limit)
+        except Exception:
+            pass
 
-        collection = f"network_flows_{context.project_id}"
-        persist = str(context.data_dir / "chroma")
-        hits = search_flows(arguments.query, collection, persist, limit=arguments.limit)
+        # Merge: live + chroma deduplicated
+        seen_urls = set()
+        merged: list[dict[str, Any]] = []
+        for h in live_hits:
+            if h.get("url") not in seen_urls:
+                seen_urls.add(h.get("url", ""))
+                merged.append({**h, "source": "live"})
+        for h in chroma_hits:
+            meta = h.get("metadata", {})
+            url = meta.get("url", "") if isinstance(meta, dict) else ""
+            if url not in seen_urls:
+                seen_urls.add(url)
+                merged.append({**h, "source": "chroma"})
 
         return ToolExecution(
             output={
                 "query": arguments.query,
-                "hits": hits,
-                "count": len(hits),
+                "hits": merged[:arguments.limit],
+                "count": len(merged),
+                "live_count": len(live_hits),
+                "chroma_count": len(chroma_hits),
             },
             notices=(
-                f"Found {len(hits)} network flow matches for '{arguments.query}'. "
-                "Use context_query for combined source+network search.",
+                f"Found {len(merged)} total matches ({len(live_hits)} live, "
+                f"{len(chroma_hits)} indexed). "
+                "Use proxy_live_capture to capture traffic first if live is empty.",
             ),
         )

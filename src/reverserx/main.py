@@ -1269,24 +1269,53 @@ def proxy_live(
 def proxy_flows(
     ctx: typer.Context,
     project: Annotated[str, typer.Argument(help="Project slug or ID.")],
+    limit: Annotated[int, typer.Option("--limit", "-n", help="Max flows to show.")] = 50,
+    bodies: Annotated[bool, typer.Option("--bodies", help="Include request/response bodies.")] = False,
 ) -> None:
-    """List captured API flows."""
-    run = _run_cli_tool(ctx, project, "proxy_flow_list", {})
+    """List captured API flows from the running proxy."""
+    run = _run_cli_tool(ctx, project, "proxy_flow_list", {
+        "limit": limit,
+        "include_bodies": bodies,
+    })
     output = run.output_data
     if _state(ctx).json_output:
         _print_json(output)
         return
     flows = output.get("flows", [])
+    total = output.get("total_captured", len(flows))
+    status = output.get("status", "unknown")
     if not flows:
-        console.print("No captured flows. Import a HAR file first.")
+        console.print(f"No captured flows (proxy status: {status}). Start proxy with 'proxy start' or 'proxy live'.")
         return
-    table = Table(title="Captured Flows")
+    console.print(f"[bold]Proxy status: {status}[/bold] — showing {len(flows)} of {total} flows")
+    table = Table(title="Captured HTTP Flows")
     table.add_column("Method")
     table.add_column("URL")
     table.add_column("Status")
+    table.add_column("Size")
+    table.add_column("Time")
     for f in flows[:50]:
-        table.add_row(f.get("method", ""), str(f.get("url", ""))[:80], str(f.get("status", "")))
+        url = str(f.get("url", ""))[:70]
+        size = f"{f.get('request_size', 0) + f.get('response_size', 0)}B"
+        dur = f"{f.get('duration_ms', 0)}ms"
+        table.add_row(f.get("method", ""), url, str(f.get("status", "")), size, dur)
     console.print(table)
+    if output.get("endpoints"):
+        console.print()
+        ep_table = Table(title="Endpoint Patterns")
+        ep_table.add_column("Pattern")
+        ep_table.add_column("Count")
+        for ep in output["endpoints"][:10]:
+            ep_table.add_row(ep.get("pattern", ""), str(ep.get("count", 0)))
+        console.print(ep_table)
+    if bodies and flows:
+        console.print()
+        first = flows[0]
+        console.print(f"[bold]Example — {first.get('method')} {first.get('url')}[/bold]")
+        if first.get("request_body"):
+            console.print(f"[dim]Request body:[/dim] {first['request_body'][:500]}")
+        if first.get("response_body"):
+            console.print(f"[dim]Response body:[/dim] {first['response_body'][:500]}")
 
 
 def _run_cli_tool(
