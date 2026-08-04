@@ -1,4 +1,4 @@
-"""Frida dynamic instrumentation tools — process listing, hook injection."""
+"""Frida dynamic instrumentation tools — process listing, script loading."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ class FridaInjectInput(FridaDeviceTarget):
     package: str = Field(min_length=1, description="Android package name")
     hook_name: str = Field(
         default="crypto",
-        description="Bundled hook name: crypto, pinning, http, intents, classtrace",
+        description="Instrumentation script: crypto, pinning, http, intents",
     )
     target_class: str = Field(default="", description="Optional class to target")
     target_method: str = Field(default="", description="Optional method to target")
@@ -36,7 +36,7 @@ class FridaInjectInput(FridaDeviceTarget):
 
 class FridaPsTool(BaseTool[FridaDeviceTarget]):
     name = "frida_ps"
-    description = "List running processes on a device via Frida."
+    description = "List running processes on an authorized device via Frida."
     version = "1.0.0"
     input_model = FridaDeviceTarget
 
@@ -60,7 +60,7 @@ class FridaPsTool(BaseTool[FridaDeviceTarget]):
 
 class FridaHookListTool(BaseTool[EmptyInput]):
     name = "frida_hook_list"
-    description = "List available bundled Frida hook scripts."
+    description = "List available Frida instrumentation scripts for authorized analysis."
     version = "1.0.0"
     input_model = EmptyInput
 
@@ -83,7 +83,7 @@ class FridaHookListTool(BaseTool[EmptyInput]):
 
 class FridaInjectTool(BaseTool[FridaInjectInput]):
     name = "frida_inject"
-    description = "Load and inject a Frida hook script into a target app process."
+    description = "Load a Frida instrumentation script for an authorized app process."
     version = "1.0.0"
     input_model = FridaInjectInput
 

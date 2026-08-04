@@ -79,7 +79,7 @@ class AdbDeviceInfoTool(BaseTool[AdbDeviceTarget]):
 
 class AdbShellTool(BaseTool[AdbShellInput]):
     name = "adb_shell"
-    description = "Execute a shell command on a connected ADB device."
+    description = "Execute a shell command on an authorized ADB device."
     version = "1.0.0"
     input_model = AdbShellInput
 

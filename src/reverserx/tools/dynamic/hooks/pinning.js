@@ -1,4 +1,4 @@
-// @version 1.0.0 — SSL/TLS certificate pinning observation hook
+// @version 1.0.0 — SSL/TLS certificate validation observation for authorized analysis
 // Hooks: TrustManager, HostnameVerifier, SSLContext, SSLSocketFactory
 
 Java.perform(function () {

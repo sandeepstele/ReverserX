@@ -1,4 +1,4 @@
-// @version 1.0.0 — Crypto operation tracing hook
+// @version 1.0.0 — Crypto operation instrumentation for authorized analysis
 // Hooks: javax.crypto.Cipher.getInstance, javax.crypto.Cipher.doFinal,
 //        javax.crypto.spec.SecretKeySpec.<init>, javax.crypto.Mac.getInstance
 

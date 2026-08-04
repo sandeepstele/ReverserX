@@ -1,4 +1,4 @@
-// @version 1.0.0 — HTTP request/response capture hook
+// @version 1.0.0 — HTTP request/response observation for authorized analysis
 // Hooks: okhttp3.OkHttpClient, okhttp3.Request, okhttp3.Response
 //        java.net.HttpURLConnection
 

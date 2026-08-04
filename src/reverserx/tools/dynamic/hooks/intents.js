@@ -1,4 +1,4 @@
-// @version 1.0.0 — Intent construction and broadcast monitoring hook
+// @version 1.0.0 — Intent construction and broadcast observation for authorized analysis
 // Hooks: android.content.Intent constructors, startActivity, sendBroadcast
 
 Java.perform(function () {
