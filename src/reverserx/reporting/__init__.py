@@ -1,5 +1,6 @@
 """Deterministic report rendering for ReverserX analyses."""
 
+from reverserx.reporting.agent import AgentReportTool
 from reverserx.reporting.static import (
     ContextReportSummary,
     ReportProject,
@@ -13,6 +14,7 @@ from reverserx.reporting.static import (
 )
 
 __all__ = [
+    "AgentReportTool",
     "ContextReportSummary",
     "ReportProject",
     "ReportSection",

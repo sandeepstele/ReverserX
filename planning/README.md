@@ -11,7 +11,7 @@ native binary analysis remain in scope.
   and development quality gates are operational.
 - **Phase 1 implementation and engineering acceptance are complete; owner and
   product acceptance remain pending.** The final implementation baseline has
-  213 passing tests with 85% measured coverage. The controlled
+  232 passing tests with 85% measured coverage. The controlled
   production-`ContextService` benchmark has hit@1/3/5 and MRR of 1.0.
 - The authorized large fixture has been safely inventoried and partially
   decompiled. Its 235,169,283-byte base contains 20 DEX files; its
@@ -33,7 +33,12 @@ native binary analysis remain in scope.
 - The static report was generated with partial/error/signing/index-warning and
   provenance limitations intact. Owner-labeled 20–30 question scoring and
   manual manifest/obfuscation review remain open.
-- Phase 2 implementation has not started.
+- **Phase 2 engineering implementation is complete; live-provider and
+  owner/product acceptance remain pending.** Recorded scenarios cover the
+  bounded state machine, invalid-plan repair, privacy-aware multimodal routing,
+  hard cost/step stops, evidence-linked findings, checkpoints, and Markdown
+  agent reports. Live Ollama/OpenAI evaluation on the authorized fixture remains
+  open.
 
 APK signing certificate, signature, and public-key evidence is inventoried and
 fingerprinted, but it is not cryptographically verified. The project must not
@@ -59,7 +64,7 @@ evidence must remain distinct.
 |---|---|---|---:|
 | [0 — Foundation](phase-00-foundation.md) | Installable CLI, contracts, storage, configuration, safe process execution | Complete | 2–3 weeks |
 | [1 — Android Static Intelligence](phase-01-static-context.md) | APK ingestion, JADX analysis, context retrieval, initial obfuscation detection | Engineering accepted; owner/product acceptance pending | 6–8 weeks |
-| [2 — Agent and Model Routing](phase-02-agent-router.md) | Planner/executor/reviewer loop, multimodal routing, cost controls | Planned | 5–7 weeks |
+| [2 — Agent and Model Routing](phase-02-agent-router.md) | Planner/executor/reviewer loop, multimodal routing, cost controls | Engineering implemented; live acceptance pending | 5–7 weeks |
 | [3 — Dynamic and API Loop](phase-03-dynamic-api.md) | ADB/Frida/mitmproxy workflow correlated with static findings | Planned | 6–9 weeks |
 | [4 — Native and Deobfuscation](phase-04-native-deobfuscation.md) | Ghidra integration, packer/CFF analysis, Java-to-JNI tracing | Planned | 8–12 weeks |
 | [5 — Persistence and Reporting](phase-05-persistence-reporting.md) | Reliable resume, evidence provenance, Markdown and HTML reports | Planned | 4–6 weeks |
@@ -68,14 +73,13 @@ evidence must remain distinct.
 The original straight-line implementation estimate is approximately **37–53
 full-time weeks**. With 20–30% contingency for external-tool compatibility,
 difficult fixtures, and research uncertainty, the production-quality solo
-estimate remains **11–17 months**. Actual work completed in Phases 0 and 1 does
+estimate remains **11–17 months**. Actual work completed in Phases 0–2 does
 not remove the uncertainty in dynamic instrumentation, native analysis, and
 agent reliability.
 
-A focused static-analysis MVP still requires Phase 2 after Phase 1
-owner/product acceptance. The original estimate for reaching that milestone
-was approximately **3–5 months** from project start; use measured remaining
-work rather than treating that early estimate as a delivery promise.
+The focused static-analysis MVP implementation now spans Phases 0–2. It is not
+release-accepted until Phase 1 owner scoring and Phase 2 live-provider,
+cost/quality, interruption, and real-fixture acceptance are recorded.
 
 ## Scope boundaries
 
@@ -125,6 +129,6 @@ Out of scope for the initial product:
   the architecture but were not scheduled in the original phase list. They now
   have explicit phases.
 
-Continue with [NEXT_STEPS.md](NEXT_STEPS.md). Phase 1 engineering is accepted;
-close the labeled-scoring and manual-review gates before treating it as
-owner/product accepted or beginning the generic Phase 2 agent loop.
+Continue with [NEXT_STEPS.md](NEXT_STEPS.md). Phase 1 and Phase 2 engineering are
+implemented; close labeled real-fixture, live-provider, and manual-review gates
+before treating the static MVP as owner/product accepted.

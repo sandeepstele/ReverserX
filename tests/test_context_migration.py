@@ -90,7 +90,7 @@ def test_v3_migration_preserves_context_children_and_allows_shared_chunks(
 
     database.initialize()
 
-    assert database.schema_version() == 3
+    assert database.schema_version() == 5
     assert repository.get_index(original.id) == original
     assert repository.list_chunks(original.id) == chunks
     assert {

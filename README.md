@@ -5,11 +5,12 @@ for Android applications, web APIs, and native binaries. It is intended to
 combine traditional security tooling with multiple AI models in one persistent,
 evidence-driven analysis workflow.
 
-> **Project status:** Pre-alpha static-analysis implementation. Phases 0 and 1
-> provide the foundation plus safe APK/APKM ingestion, JADX integration, manifest
-> and signing metadata, persistent source indexing, Chroma-backed retrieval,
-> context budgets, obfuscation signals, benchmarks, and Markdown reports. Dynamic
-> analysis and autonomous model orchestration are not implemented yet.
+> **Project status:** Pre-alpha static-analysis MVP implementation. Phases 0–2
+> provide the foundation, safe APK/APKM ingestion, JADX integration, persistent
+> retrieval, bounded plan-execute-review orchestration, capability-first local or
+> hosted model routing, budgets, checkpoints, and evidence-linked reports. Dynamic
+> analysis is not implemented yet; live-provider and owner/product acceptance
+> remain pending.
 
 ## Quick start
 
@@ -66,7 +67,7 @@ variables and are redacted from configuration output and configured logs.
 ## Phase 1 validation status
 
 Phase 1 implementation and engineering acceptance are complete. The final
-repository gate has **213 passing tests** with **85% measured coverage**; Ruff
+repository gate has **232 passing tests** with **85% measured coverage**; Ruff
 formatting and linting, strict MyPy checks, the locked dependency check, and
 wheel/source-package builds also pass.
 
@@ -221,7 +222,7 @@ their source, tool version, and confidence.
 |---|---|---|---:|
 | [0 — Foundation](planning/phase-00-foundation.md) | Implemented | CLI, contracts, storage, configuration, safe subprocesses | 2–3 weeks |
 | [1 — Static intelligence](planning/phase-01-static-context.md) | Implemented | APK ingestion, JADX, retrieval, context budgets, obfuscation signals | 6–8 weeks |
-| [2 — Agent and router](planning/phase-02-agent-router.md) | Next | Bounded agent loop, model routing, estimates and usage limits | 5–7 weeks |
+| [2 — Agent and router](planning/phase-02-agent-router.md) | Implemented; acceptance pending | Bounded agent loop, model routing, estimates and usage limits | 5–7 weeks |
 | [3 — Dynamic and API](planning/phase-03-dynamic-api.md) | Planned | ADB, Frida, mitmproxy, endpoint mapping, evidence correlation | 6–9 weeks |
 | [4 — Native and deobfuscation](planning/phase-04-native-deobfuscation.md) | Planned | Ghidra, packer/CFF detection, JNI/native graph | 8–12 weeks |
 | [5 — Persistence and reporting](planning/phase-05-persistence-reporting.md) | Planned | Full resume, evidence provenance, Markdown/HTML reports | 4–6 weeks |
@@ -275,12 +276,25 @@ Phase 1 now supports a deterministic Android static pipeline:
    budget.
 8. Record obfuscation evidence and render a lineage-checked Markdown report.
 
-The next implementation target is [Phase 2](planning/phase-02-agent-router.md):
-the bounded plan-execute-review loop, multimodal model capability routing,
-provider privacy policy, usage accounting, and run budgets. Phase 1 commands are
-usable without any hosted-model key; `hashing` is the deterministic local
-embedding fallback, while Ollama is available as the learned local embedding
-adapter.
+Phase 2 adds a strict planner schema, registered-tool-only executor, finite
+reviewer decisions, loop detection, working memory, checkpoints, evidence-linked
+findings, and model usage accounting. Capability-first routing supports local
+Ollama and an optional OpenAI Responses provider; unsupported modalities and
+privacy-policy conflicts fail explicitly. Inspect an estimate before execution:
+
+```bash
+uv run reverserx --data-dir .reverserx agent estimate demo-app \
+  "Locate request encryption and report source evidence" --local-only
+uv run reverserx --data-dir .reverserx agent run demo-app \
+  "Locate request encryption and report source evidence" --local-only --yes
+uv run reverserx --data-dir .reverserx agent sessions demo-app
+```
+
+Use `--local-models-only` when creating a project to persistently prohibit hosted
+models. Phase 1 commands remain usable without any model-provider key; `hashing`
+is the deterministic local embedding fallback. Phase 2 engineering is covered by
+recorded-provider scenarios, but live Ollama/OpenAI evaluation and real-app owner
+acceptance are still required before release to testers.
 
 ## Planned external dependencies
 

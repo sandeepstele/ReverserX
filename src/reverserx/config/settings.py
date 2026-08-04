@@ -35,7 +35,21 @@ class Settings(BaseModel):
     max_agent_steps: int = Field(default=30, ge=1, le=1_000)
     max_tool_retries: int = Field(default=2, ge=0, le=20)
     max_run_cost_usd: float = Field(default=5.0, ge=0)
+    max_agent_input_tokens: int = Field(default=500_000, ge=1)
+    max_agent_output_tokens: int = Field(default=100_000, ge=1)
+    max_agent_wall_time_seconds: float = Field(default=3_600, gt=0)
+    max_tool_duration_seconds: float = Field(default=900, gt=0)
+    model_output_tokens_per_call: int = Field(default=4_096, ge=128)
     hosted_models_enabled: bool = True
+    openai_model: str = "gpt-5.6-sol"
+    openai_base_url: str = "https://api.openai.com/v1"
+    openai_input_cost_per_million: float = Field(default=5, ge=0)
+    openai_output_cost_per_million: float = Field(default=30, ge=0)
+    openai_image_cost_per_million: float = Field(default=5, ge=0)
+    ollama_model: str = "gpt-oss:20b"
+    ollama_base_url: str = "http://127.0.0.1:11434"
+    ollama_image_support: bool = False
+    provider_timeout_seconds: float = Field(default=120, gt=0)
     anthropic_api_key: SecretStr | None = None
     deepseek_api_key: SecretStr | None = None
     openai_api_key: SecretStr | None = None
@@ -123,7 +137,21 @@ def _read_environment(environ: Mapping[str, str]) -> dict[str, Any]:
         "REVERSERX_MAX_AGENT_STEPS": "max_agent_steps",
         "REVERSERX_MAX_TOOL_RETRIES": "max_tool_retries",
         "REVERSERX_MAX_RUN_COST_USD": "max_run_cost_usd",
+        "REVERSERX_MAX_AGENT_INPUT_TOKENS": "max_agent_input_tokens",
+        "REVERSERX_MAX_AGENT_OUTPUT_TOKENS": "max_agent_output_tokens",
+        "REVERSERX_MAX_AGENT_WALL_TIME_SECONDS": "max_agent_wall_time_seconds",
+        "REVERSERX_MAX_TOOL_DURATION_SECONDS": "max_tool_duration_seconds",
+        "REVERSERX_MODEL_OUTPUT_TOKENS_PER_CALL": "model_output_tokens_per_call",
         "REVERSERX_HOSTED_MODELS_ENABLED": "hosted_models_enabled",
+        "REVERSERX_OPENAI_MODEL": "openai_model",
+        "REVERSERX_OPENAI_BASE_URL": "openai_base_url",
+        "REVERSERX_OPENAI_INPUT_COST_PER_MILLION": ("openai_input_cost_per_million"),
+        "REVERSERX_OPENAI_OUTPUT_COST_PER_MILLION": ("openai_output_cost_per_million"),
+        "REVERSERX_OPENAI_IMAGE_COST_PER_MILLION": ("openai_image_cost_per_million"),
+        "REVERSERX_OLLAMA_MODEL": "ollama_model",
+        "REVERSERX_OLLAMA_BASE_URL": "ollama_base_url",
+        "REVERSERX_OLLAMA_IMAGE_SUPPORT": "ollama_image_support",
+        "REVERSERX_PROVIDER_TIMEOUT_SECONDS": "provider_timeout_seconds",
         "ANTHROPIC_API_KEY": "anthropic_api_key",
         "DEEPSEEK_API_KEY": "deepseek_api_key",
         "OPENAI_API_KEY": "openai_api_key",

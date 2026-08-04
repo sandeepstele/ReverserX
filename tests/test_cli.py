@@ -70,6 +70,7 @@ def test_cli_initializes_and_manages_project(tmp_path: Path) -> None:
     projects = json.loads(listed.output)
     assert projects[0]["slug"] == "demo-app"
     assert projects[0]["scope"]["packages"] == ["com.example.demo"]
+    assert projects[0]["scope"]["model_policy"] == {"local_only": False}
 
 
 def test_cli_imports_artifact_and_records_tool_run(tmp_path: Path) -> None:
@@ -108,6 +109,43 @@ def test_cli_doctor_supports_json(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     checks = json.loads(result.output)
     assert any(check["name"] == "python" for check in checks)
+
+
+def test_agent_estimate_and_confirmation_do_not_call_a_model(tmp_path: Path) -> None:
+    runner.invoke(app, ["--data-dir", str(tmp_path), "project", "create", "Demo"])
+
+    estimated = runner.invoke(
+        app,
+        [
+            "--data-dir",
+            str(tmp_path),
+            "--json",
+            "agent",
+            "estimate",
+            "demo",
+            "Locate encryption",
+            "--local-only",
+        ],
+    )
+    unconfirmed = runner.invoke(
+        app,
+        [
+            "--data-dir",
+            str(tmp_path),
+            "agent",
+            "run",
+            "demo",
+            "Locate encryption",
+            "--local-only",
+        ],
+    )
+
+    assert estimated.exit_code == 0, estimated.output
+    assert json.loads(estimated.output)["provider"] == "ollama"
+    assert unconfirmed.exit_code == 2
+    database = Database(Settings(data_dir=tmp_path).database_path)
+    project = database.get_project("demo")
+    assert database.list_sessions(project.id) == []
 
 
 def test_cli_persists_unexpected_tool_failure(

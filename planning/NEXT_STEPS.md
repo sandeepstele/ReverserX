@@ -1,13 +1,12 @@
 # What You Can Do Now
 
-Phase 0 and Phase 1 engineering are complete. The immediate objective is to
-finish owner/product acceptance through labeled scoring and manual review, not
-to treat engineering acceptance as proof of product quality or begin the
-generic agent loop early.
+Phase 0–2 engineering implementation is complete. The immediate objective is to
+finish Phase 1 owner scoring and Phase 2 live-provider/real-fixture acceptance,
+not to treat recorded engineering scenarios as proof of product quality.
 
 ## Current verified baseline
 
-- The final implementation baseline has 213 passing repository tests with 85%
+- The final implementation baseline has 232 passing repository tests with 85%
   measured coverage.
 - Ruff formatting/linting and strict MyPy validation pass.
 - The controlled production-`ContextService` benchmark records hit@1, hit@3,
@@ -83,7 +82,29 @@ Complete these tasks before declaring product acceptance:
 6. Approve a small redistributable fixture for CI and public examples. Keep the
    authorized private APK and its recovered sources out of Git.
 
-## Decisions needed before Phase 2
+## Remaining Phase 2 live acceptance work
+
+The local route and authorized encryption-location run are complete. Session
+`ses_06ca3ead51b84321b6339a444f425d7b` used `gpt-oss:20b` model ID
+`17052f91a42e`, completed four tool steps in about 324 seconds, persisted five
+candidate findings and a final checkpoint, and created an evidence-linked report
+at zero provider cost. The initial plan and one reviewer decision required the
+bounded repair paths; both repaired outputs passed local schema validation.
+
+1. Have the app owner review the local plan, five candidate findings, source-line
+   evidence, unsupported-claim risk, and generated report.
+2. If hosted processing is approved, set the provider key only in the local
+   environment and run the same allowed-context scenarios through OpenAI.
+3. If a hosted run is approved, score both routes for correctness, evidence,
+   usefulness, unsupported claims,
+   latency, tokens, and cost; do not select a default from model reputation alone.
+4. Deliberately stop one live run and verify the latest persisted checkpoint contains
+   plan status, attempts, working memory, and usage needed for later polished
+   resume support.
+5. Record whether the static MVP is accepted for a small trusted test group or
+   which bounded fixes are required first.
+
+## Decisions needed before Phase 2 live acceptance
 
 - Is ReverserX initially a personal local tool or a distributable product?
 - Must analysis work completely offline, or may approved source/image context be
@@ -94,10 +115,11 @@ Complete these tasks before declaring product acceptance:
   analysis?
 - How long should APKs, recovered source, embeddings, reports, and model
   transcripts be retained?
-- What exact Phase 1 result is the go/no-go gate for beginning Phase 2?
+- What exact Phase 1 and live-provider result is the go/no-go gate for releasing
+  the static MVP to trusted testers?
 
 Do not place provider API keys in chat or Git. Configure them locally through
-environment variables when Phase 2 begins.
+environment variables only for approved Phase 2 live-provider evaluation.
 
 ## Useful owner work to finish acceptance
 
@@ -152,7 +174,7 @@ environment variables when Phase 2 begins.
 - Do not describe signing fingerprints as cryptographic verification.
 - Do not commit the authorized APK, recovered proprietary source, or private
   indexes.
-- Do not begin the generic autonomous agent loop before the remaining Phase 1
-  acceptance gates close.
+- Do not release the bounded agent loop to testers before the remaining Phase 1
+  and Phase 2 live acceptance gates close.
 - Do not start Frida, Ghidra, or broad deobfuscation work before the static
   vertical slice receives owner/product acceptance.

@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
-from reverserx.reporting import StaticReportTool
+from reverserx.reporting import AgentReportTool, StaticReportTool
 from reverserx.tools.base import BaseTool, ToolContext, ToolExecution
 from reverserx.tools.example import EchoTool
 from reverserx.tools.static import (
@@ -58,11 +58,17 @@ class ToolRegistry:
         arguments: Mapping[str, Any],
     ) -> ToolExecution:
         tool = self.get(name)
+        validated = self.validate_arguments(name, arguments)
+        return tool.execute(context, validated)
+
+    def validate_arguments(self, name: str, arguments: Mapping[str, Any]) -> BaseModel:
+        """Validate untrusted arguments without executing a tool."""
+
+        tool = self.get(name)
         try:
-            validated = tool.input_model.model_validate(dict(arguments))
+            return tool.input_model.model_validate(dict(arguments))
         except ValidationError as exc:
             raise ToolValidationError(f"invalid arguments for {name}: {exc}") from exc
-        return tool.execute(context, validated)
 
 
 def build_default_registry() -> ToolRegistry:
@@ -78,4 +84,5 @@ def build_default_registry() -> ToolRegistry:
     registry.register(SourceSearchTool())
     registry.register(ContextQueryTool())
     registry.register(StaticReportTool())
+    registry.register(AgentReportTool())
     return registry

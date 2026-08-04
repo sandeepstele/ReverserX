@@ -126,7 +126,8 @@ class SourceIndexTool(BaseTool[SourceIndexInput]):
 class SourceSearchTool(BaseTool[SourceSearchInput]):
     name = "source_search"
     description = (
-        "Search persisted source chunks using exact text or a regular expression."
+        "Search the project's latest persisted source index using exact text or a "
+        "regular expression; no source path/root argument is needed or accepted."
     )
     version = "1.1.0"
     input_model = SourceSearchInput
@@ -158,7 +159,10 @@ class SourceSearchTool(BaseTool[SourceSearchInput]):
 
 class ContextQueryTool(BaseTool[ContextQueryInput]):
     name = "context_query"
-    description = "Retrieve and token-budget source context for an analysis goal."
+    description = (
+        "Retrieve and token-budget source context from the project's latest persisted "
+        "index; optional known_paths are ranking hints, not a source root."
+    )
     version = "1.0.0"
     input_model = ContextQueryInput
 

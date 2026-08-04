@@ -3,7 +3,7 @@
 This document describes the implemented foundation and the boundaries future
 phases must preserve. The broader product vision remains in [Plan.md](Plan.md).
 
-## Current foundation
+## Current implementation
 
 ```text
 CLI (Typer + Rich)
@@ -14,12 +14,23 @@ CLI (Typer + Rich)
   +-- ToolRegistry ---- explicit allowlist and input validation
   +-- Doctor ---------- host capability and tool-version discovery
   `-- ProcessRunner --- no shell, timeout/cancel, bounded output
+
+AgentService (bounded state machine)
+  |
+  +-- Planner --------- strict structured plan + one repair attempt
+  +-- Executor -------- registered tools and validated arguments only
+  +-- Reviewer -------- accept/retry/refine/inject/stop transitions
+  +-- ModelRouter ----- capability, privacy, context, quality, then cost
+  +-- Usage ledger ---- estimates, actual tokens/images/cost, hard limits
+  `-- Checkpoints ----- persisted state, plan attempts, memory, findings
 ```
 
 Source code uses a `src/` layout:
 
 ```text
 src/reverserx/
+├── agent/                    bounded planner/executor/reviewer service
+├── ai/                       multimodal contracts, providers, router, pricing
 ├── main.py                  CLI composition and application boundary
 ├── config/settings.py       validated configuration and redaction
 ├── core/models.py           provider-independent versioned schemas
@@ -69,11 +80,9 @@ and cancellation terminate the managed process group.
 
 ## Future layers
 
-Phase 1 adds deterministic APK/JADX adapters and context retrieval. Phase 2 adds
-provider adapters and a bounded agent state machine. Later phases add ADB,
-Frida, proxy, Ghidra, evidence correlation, full resume, and reports. These
-layers must depend inward on core contracts rather than placing provider logic
-inside storage or deterministic tool adapters.
+Later phases add ADB, Frida, proxy, Ghidra, deeper evidence correlation, polished
+resume, and HTML export. These layers must depend inward on core contracts rather
+than placing provider logic inside storage or deterministic tool adapters.
 
 ## Runtime layout
 

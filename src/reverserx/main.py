@@ -15,6 +15,8 @@ from rich.console import Console
 from rich.table import Table
 
 from reverserx import __version__
+from reverserx.agent import AgentLimits, AgentService
+from reverserx.ai import ModelRouter, ProjectModelPolicy, build_provider_registry
 from reverserx.config import Settings, SettingsError
 from reverserx.core.models import Artifact, Project, ToolRun, ToolRunStatus, utc_now
 from reverserx.storage import (
@@ -46,6 +48,7 @@ source_app = typer.Typer(help="Index and search decompiled source code.")
 context_app = typer.Typer(help="Retrieve token-budgeted analysis context.")
 obfuscation_app = typer.Typer(help="Inspect source trees for obfuscation signals.")
 report_app = typer.Typer(help="Render deterministic analysis reports.")
+agent_app = typer.Typer(help="Run bounded plan-execute-review analysis sessions.")
 app.add_typer(project_app, name="project")
 app.add_typer(artifact_app, name="artifact")
 app.add_typer(tool_app, name="tool")
@@ -56,6 +59,7 @@ app.add_typer(source_app, name="source")
 app.add_typer(context_app, name="context")
 app.add_typer(obfuscation_app, name="obfuscation")
 app.add_typer(report_app, name="report")
+app.add_typer(agent_app, name="agent")
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,6 +198,188 @@ def config_show(ctx: typer.Context) -> None:
         console.print(f"[bold]{key}[/bold]: {value}")
 
 
+@agent_app.command("estimate")
+def agent_estimate(
+    ctx: typer.Context,
+    project: Annotated[str, typer.Argument(help="Project slug or ID.")],
+    goal: Annotated[str, typer.Argument(help="Authorized analysis goal.")],
+    local_only: Annotated[
+        bool,
+        typer.Option(help="Require all model processing to stay local."),
+    ] = False,
+    provider: Annotated[
+        list[str] | None,
+        typer.Option("--provider", help="Preferred provider; repeatable."),
+    ] = None,
+) -> None:
+    """Estimate the bounded run before any model request is sent."""
+
+    runtime = _runtime(ctx)
+    resolved_project = _get_project_from_runtime(runtime, project)
+    service, policy = _agent_runtime(
+        runtime,
+        project=resolved_project,
+        local_only=local_only,
+        providers=tuple(provider or ()),
+    )
+    try:
+        estimate = service.estimate(project=resolved_project, goal=goal, policy=policy)
+    except (ValueError, RuntimeError) as exc:
+        _fail(str(exc))
+    _emit(
+        ctx,
+        estimate.model_dump(mode="json"),
+        (
+            f"Planned model: {estimate.provider}/{estimate.model}\n"
+            f"Maximum projected calls: {estimate.projected_model_calls}\n"
+            f"Projected upper-bound cost: ${estimate.projected_cost_usd:.6f}\n"
+            "No model request was sent."
+        ),
+    )
+
+
+@agent_app.command("run")
+def agent_run(
+    ctx: typer.Context,
+    project: Annotated[str, typer.Argument(help="Project slug or ID.")],
+    goal: Annotated[str, typer.Argument(help="Authorized analysis goal.")],
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", help="Confirm the displayed model-cost estimate."),
+    ] = False,
+    local_only: Annotated[
+        bool,
+        typer.Option(help="Require all model processing to stay local."),
+    ] = False,
+    provider: Annotated[
+        list[str] | None,
+        typer.Option("--provider", help="Preferred provider; repeatable."),
+    ] = None,
+) -> None:
+    """Execute a confirmed, bounded static-analysis agent session."""
+
+    runtime = _runtime(ctx)
+    resolved_project = _get_project_from_runtime(runtime, project)
+    service, policy = _agent_runtime(
+        runtime,
+        project=resolved_project,
+        local_only=local_only,
+        providers=tuple(provider or ()),
+    )
+    try:
+        estimate = service.estimate(project=resolved_project, goal=goal, policy=policy)
+    except (ValueError, RuntimeError) as exc:
+        _fail(str(exc))
+    if not yes:
+        _emit(
+            ctx,
+            estimate.model_dump(mode="json"),
+            (
+                f"Planned model: {estimate.provider}/{estimate.model}\n"
+                f"Projected upper-bound cost: ${estimate.projected_cost_usd:.6f}\n"
+                "Review the estimate, then rerun with --yes to execute."
+            ),
+        )
+        raise typer.Exit(code=2)
+    try:
+        result = service.run(project=resolved_project, goal=goal, policy=policy)
+    except (ValueError, RuntimeError) as exc:
+        _fail(str(exc))
+    _emit(
+        ctx,
+        result.model_dump(mode="json"),
+        (
+            f"Session {result.session.id}: {result.session.status.value}\n"
+            f"Steps: {len(result.steps)}; findings: {len(result.findings)}\n"
+            f"Actual model cost: ${result.actual_cost_usd:.6f}\n"
+            f"Stop reason: {result.stop_reason}"
+        ),
+    )
+
+
+@agent_app.command("sessions")
+def agent_sessions(
+    ctx: typer.Context,
+    project: Annotated[str, typer.Argument(help="Project slug or ID.")],
+) -> None:
+    """List persistent agent sessions for a project."""
+
+    runtime = _runtime(ctx)
+    resolved_project = _get_project_from_runtime(runtime, project)
+    sessions = runtime.database.list_sessions(resolved_project.id)
+    _emit(
+        ctx,
+        [session.model_dump(mode="json") for session in sessions],
+        "\n".join(
+            f"{session.id}  {session.status.value}  {session.goal}"
+            for session in sessions
+        )
+        or "No analysis sessions.",
+    )
+
+
+@agent_app.command("show")
+def agent_show(
+    ctx: typer.Context,
+    project: Annotated[str, typer.Argument(help="Project slug or ID.")],
+    session_id: Annotated[str, typer.Argument(help="Analysis session ID.")],
+) -> None:
+    """Inspect a session, its plan, usage, findings, and latest checkpoint."""
+
+    runtime = _runtime(ctx)
+    project_record = _get_project_from_runtime(runtime, project)
+    try:
+        session = runtime.database.get_session(session_id)
+    except NotFoundError as exc:
+        _fail(str(exc))
+    if session.project_id != project_record.id:
+        _fail(f"session does not belong to project {project_record.slug}")
+    steps = runtime.database.list_plan_steps(session.id)
+    plan_attempts = runtime.database.list_plan_attempts(session.id)
+    usage_records = runtime.database.list_model_usage(session.id)
+    tool_runs = [
+        run
+        for run in runtime.database.list_tool_runs(project_record.id)
+        if run.session_id == session.id
+    ]
+    tool_run_ids = {run.id for run in tool_runs}
+    evidence = [
+        item
+        for item in runtime.database.list_evidence(project_record.id)
+        if item.tool_run_id in tool_run_ids
+    ]
+    evidence_ids = {item.id for item in evidence}
+    findings = [
+        finding
+        for finding in runtime.database.list_findings(project_record.id)
+        if any(evidence_id in evidence_ids for evidence_id in finding.evidence_ids)
+    ]
+    payload = {
+        "session": session.model_dump(mode="json"),
+        "plan_attempts": [attempt.model_dump(mode="json") for attempt in plan_attempts],
+        "steps": [step.model_dump(mode="json") for step in steps],
+        "tool_runs": [run.model_dump(mode="json") for run in tool_runs],
+        "evidence": [item.model_dump(mode="json") for item in evidence],
+        "usage": [usage.model_dump(mode="json") for usage in usage_records],
+        "findings": [finding.model_dump(mode="json") for finding in findings],
+        "checkpoint": (
+            checkpoint.model_dump(mode="json")
+            if (checkpoint := runtime.database.latest_checkpoint(session.id))
+            else None
+        ),
+    }
+    _emit(
+        ctx,
+        payload,
+        (
+            f"Session {session.id}: {session.status.value}\n"
+            f"Steps: {len(steps)}; model calls: {len(usage_records)}; "
+            f"findings: {len(findings)}\n"
+            f"Stop reason: {session.state.get('stop_reason', '')}"
+        ),
+    )
+
+
 @project_app.command("create")
 def project_create(
     ctx: typer.Context,
@@ -213,12 +399,23 @@ def project_create(
         list[str] | None,
         typer.Option("--host", help="Authorized API host; repeatable."),
     ] = None,
+    local_models_only: Annotated[
+        bool,
+        typer.Option(
+            "--local-models-only",
+            help="Persistently prohibit hosted models for this project.",
+        ),
+    ] = False,
 ) -> None:
     """Create a project and its initial authorization scope."""
 
     runtime = _runtime(ctx)
     project_slug = slug or _slugify(name)
-    scope = {"packages": sorted(package or []), "hosts": sorted(host or [])}
+    scope = {
+        "packages": sorted(package or []),
+        "hosts": sorted(host or []),
+        "model_policy": {"local_only": local_models_only},
+    }
     try:
         project = runtime.database.create_project(
             Project(slug=project_slug, name=name, description=description, scope=scope)
@@ -1285,6 +1482,48 @@ def _runtime(ctx: typer.Context) -> Runtime:
         return Runtime.create(_state(ctx).settings)
     except (OSError, ValueError) as exc:
         _fail(f"cannot initialize ReverserX: {exc}")
+
+
+def _agent_runtime(
+    runtime: Runtime,
+    *,
+    project: Project,
+    local_only: bool,
+    providers: tuple[str, ...],
+) -> tuple[AgentService, ProjectModelPolicy]:
+    configured = build_provider_registry(runtime.settings)
+    service = AgentService(
+        database=runtime.database,
+        tools=runtime.tools,
+        providers=configured,
+        router=ModelRouter(configured.capabilities()),
+        data_dir=runtime.settings.data_dir,
+        artifact_root=runtime.settings.artifact_root,
+        limits=AgentLimits(
+            max_steps=runtime.settings.max_agent_steps,
+            max_retries=runtime.settings.max_tool_retries,
+            max_input_tokens=runtime.settings.max_agent_input_tokens,
+            max_output_tokens=runtime.settings.max_agent_output_tokens,
+            max_cost_usd=runtime.settings.max_run_cost_usd,
+            max_wall_time_seconds=runtime.settings.max_agent_wall_time_seconds,
+            max_tool_duration_seconds=runtime.settings.max_tool_duration_seconds,
+            model_output_tokens_per_call=(
+                runtime.settings.model_output_tokens_per_call
+            ),
+        ),
+    )
+    raw_model_policy = project.scope.get("model_policy")
+    project_local_only = (
+        bool(raw_model_policy.get("local_only", False))
+        if isinstance(raw_model_policy, dict)
+        else False
+    )
+    policy = ProjectModelPolicy(
+        hosted_enabled=runtime.settings.hosted_models_enabled,
+        local_only=local_only or project_local_only,
+        preferred_providers=providers,
+    )
+    return service, policy
 
 
 def _get_project(ctx: typer.Context, reference: str) -> Project:

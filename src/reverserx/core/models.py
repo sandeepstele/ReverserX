@@ -166,6 +166,20 @@ class PlanStep(SchemaModel):
     arguments: dict[str, Any] = Field(default_factory=dict)
     status: PlanStepStatus = PlanStepStatus.PENDING
     depends_on: tuple[str, ...] = ()
+    tool_run_id: str | None = None
+    attempts: int = Field(default=0, ge=0)
+    last_error: str | None = None
+
+
+class PlanAttempt(SchemaModel):
+    id: str = Field(default_factory=lambda: new_id("pla"))
+    session_id: str
+    attempt: int = Field(ge=0)
+    response: dict[str, Any] | None = None
+    raw_text: str = ""
+    valid: bool
+    validation_error: str | None = None
+    created_at: datetime = Field(default_factory=utc_now)
 
 
 class ModelUsage(SchemaModel):
@@ -177,6 +191,16 @@ class ModelUsage(SchemaModel):
     task_type: str
     input_tokens: int = Field(ge=0)
     output_tokens: int = Field(ge=0)
+    input_image_count: int = Field(default=0, ge=0)
     estimated_cost_usd: float = Field(ge=0)
     actual_cost_usd: float | None = Field(default=None, ge=0)
+    request_id: str | None = None
+    created_at: datetime = Field(default_factory=utc_now)
+
+
+class AgentCheckpoint(SchemaModel):
+    id: str = Field(default_factory=lambda: new_id("chk"))
+    session_id: str
+    sequence: int = Field(ge=0)
+    state: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=utc_now)
