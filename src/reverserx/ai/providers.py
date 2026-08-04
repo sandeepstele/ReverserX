@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -62,11 +62,13 @@ class DeepSeekProvider(ModelProvider):
         model: str = "deepseek-chat",
         base_url: str = "https://api.deepseek.com/v1",
         timeout_seconds: float = 120,
+        _transport: Callable[..., dict[str, object]] | None = None,
     ) -> None:
         self.api_key = api_key
         self.model = model
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
+        self._transport = _transport
 
     @property
     def capability(self) -> str:
@@ -112,15 +114,26 @@ class DeepSeekProvider(ModelProvider):
             else:
                 messages.insert(0, {"role": "system", "content": schema_hint})
 
-        response = _post_json(
-            f"{self.base_url}/chat/completions",
-            payload,
-            {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            self.timeout_seconds,
-        )
+        if self._transport is not None:
+            response = self._transport(
+                f"{self.base_url}/chat/completions",
+                payload,
+                {
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                self.timeout_seconds,
+            )
+        else:
+            response = _post_json(
+                f"{self.base_url}/chat/completions",
+                payload,
+                {
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                self.timeout_seconds,
+            )
         text = _chat_output_text(response)
         structured = _parse_structured(text, request.output_schema is not None)
         usage_data = response.get("usage")

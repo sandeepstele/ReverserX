@@ -111,7 +111,10 @@ def test_cli_doctor_supports_json(tmp_path: Path) -> None:
     assert any(check["name"] == "python" for check in checks)
 
 
-def test_agent_estimate_and_confirmation_do_not_call_a_model(tmp_path: Path) -> None:
+def test_agent_estimate_and_confirmation_do_not_call_a_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test-dummy")
     runner.invoke(app, ["--data-dir", str(tmp_path), "project", "create", "Demo"])
 
     estimated = runner.invoke(

@@ -72,7 +72,7 @@ def test_deepseek_provider_builds_chat_payload() -> None:
             "usage": {"prompt_tokens": 10, "completion_tokens": 5},
         }
 
-    provider = DeepSeekProvider("sk-test", transport=transport)  # type: ignore[arg-type]
+    provider = DeepSeekProvider("sk-test", _transport=transport)  # type: ignore[arg-type]
     request = ModelRequest(
         messages=(
             ModelMessage(role=MessageRole.SYSTEM, parts=(TextPart(text="You are helpful"),)),

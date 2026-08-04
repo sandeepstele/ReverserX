@@ -88,11 +88,13 @@ class AgentService:
         goal: str,
     ) -> AgentRunEstimate:
         calls = self.limits.max_steps + 2
-        est = self.router.estimate(ModelRequest(messages=()))
+        est = self.router.estimate()
         return AgentRunEstimate(
             provider="deepseek",
             model=str(est.get("model", "deepseek-chat")),
             projected_model_calls=calls,
+            projected_input_tokens=calls * 1024,
+            projected_output_tokens=calls * 512,
             projected_cost_usd=0.0,
         )
 
@@ -928,8 +930,6 @@ class AgentService:
         )
         return self.database.update_session(updated)
 
-    @staticmethod
-    
     def _result(
         self,
         session: AnalysisSession,

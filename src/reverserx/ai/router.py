@@ -15,7 +15,7 @@ class ModelRouter:
     def generate(self, request: ModelRequest) -> ModelResponse:
         return self._provider.generate(request)
 
-    def estimate(self, request: ModelRequest) -> dict[str, object]:
+    def estimate(self) -> dict[str, object]:
         return {
             "provider": "deepseek",
             "model": self._provider.model,

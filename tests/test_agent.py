@@ -146,7 +146,7 @@ def test_agent_stops_on_step_limit(tmp_path: Path) -> None:
 
     service, _, project, _ = _service(
         tmp_path,
-        [_response(infinite_plan)] + [_response(_review()), _response(inject_review)] * 10,
+        [_response(infinite_plan)] + [_response(inject_review)] * 10,
         limits=AgentLimits(max_steps=2, max_input_tokens=999999, max_output_tokens=99999, model_output_tokens_per_call=128),
     )
 
