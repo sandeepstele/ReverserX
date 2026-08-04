@@ -1224,6 +1224,47 @@ def proxy_import(
     console.print(f"Endpoints grouped: {output.get('endpoint_count', 0)}")
 
 
+@proxy_app_cli.command("live")
+def proxy_live(
+    ctx: typer.Context,
+    project: Annotated[str, typer.Argument(help="Project slug or ID.")],
+    port: Annotated[int, typer.Option("--port", "-p", help="Proxy listen port.")] = 8080,
+    duration: Annotated[int, typer.Option("--duration", "-d", help="Capture duration in seconds.")] = 60,
+    index: Annotated[bool, typer.Option("--index/--no-index", help="Index flows into ChromaDB.")] = True,
+) -> None:
+    """Live HTTP traffic capture — like HTTP Toolkit built into ReverserX.
+
+    Starts mitmproxy, captures flows in real-time, indexes them into ChromaDB,
+    and displays endpoint patterns and request details.
+    """
+    run = _run_cli_tool(ctx, project, "proxy_live_capture", {
+        "port": port,
+        "duration_seconds": float(duration),
+        "index_flows": index,
+    })
+    output = run.output_data
+    if _state(ctx).json_output:
+        _print_json(output)
+        return
+    console.print(f"[bold]Live capture complete[/bold] — {output.get('duration', 0)}s")
+    console.print(f"Flows captured: {output.get('flows_captured', 0)}")
+    console.print(f"Indexed chunks: {output.get('indexed_chunks', 0)}")
+    console.print(f"Endpoints discovered: {len(output.get('endpoints', []))}")
+    console.print()
+    if output.get("endpoints"):
+        table = Table(title="Discovered API Endpoints")
+        table.add_column("Method")
+        table.add_column("Pattern")
+        table.add_column("Host")
+        table.add_column("Count")
+        for ep in output["endpoints"]:
+            table.add_row(ep.get("method", ""), ep["pattern"], ep.get("host", ""), str(ep.get("count", 0)))
+        console.print(table)
+    console.print()
+    console.print(f"[dim]HAR saved to: {output.get('har_path', '')}[/dim]")
+    console.print("[dim]Search captured traffic: reverserx context query <project> \"API request patterns\"[/dim]")
+
+
 @proxy_app_cli.command("flows")
 def proxy_flows(
     ctx: typer.Context,

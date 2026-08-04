@@ -19,6 +19,8 @@ from reverserx.tools.dynamic import (
     FridaInjectTool,
     FridaPsTool,
     InteractionWaitTool,
+    LiveCaptureTool,
+    NetworkFlowSearchTool,
     ProxyCaptureImportTool,
     ProxyFlowListTool,
     ProxyStartTool,
@@ -112,6 +114,8 @@ def build_default_registry() -> ToolRegistry:
     registry.register(ProxyStopTool())
     registry.register(ProxyCaptureImportTool())
     registry.register(ProxyFlowListTool())
+    registry.register(LiveCaptureTool())
+    registry.register(NetworkFlowSearchTool())
     registry.register(InteractionWaitTool())
     registry.register(CorrelateEvidenceTool())
     return registry

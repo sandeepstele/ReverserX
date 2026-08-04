@@ -14,6 +14,8 @@ from reverserx.tools.dynamic.frida import (
 from reverserx.tools.dynamic.correlation import CorrelateEvidenceTool
 from reverserx.tools.dynamic.interaction import InteractionWaitTool
 from reverserx.tools.dynamic.proxy import (
+    LiveCaptureTool,
+    NetworkFlowSearchTool,
     ProxyCaptureImportTool,
     ProxyFlowListTool,
     ProxyStartTool,
@@ -30,6 +32,8 @@ __all__ = [
     "FridaPsTool",
     "CorrelateEvidenceTool",
     "InteractionWaitTool",
+    "LiveCaptureTool",
+    "NetworkFlowSearchTool",
     "ProxyCaptureImportTool",
     "ProxyFlowListTool",
     "ProxyStartTool",
